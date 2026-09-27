@@ -14,6 +14,28 @@ export async function api<T>(path:string,body?:unknown,method?:string,options:Re
  const r=await fetch('/api/v1'+path,{...options,method:method??(body===undefined?'GET':'POST'),headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
  if(!r.ok){let j:{message?:string;detail?:unknown}={};try{j=await r.json()}catch{};throw new Error(j.message??(typeof j.detail==='string'?j.detail:`Request failed (${r.status}). Please retry.`));}return r.json();
 }
-export async function waitJob(id:string,signal?:AbortSignal):Promise<Record<string,string>>{
- for(let i=0;i<600;i++){if(signal?.aborted)throw new Error('Cancelled');const j=await api<{state:string;result:Record<string,string>;error:string}>('/jobs/'+id,undefined,undefined,{signal});if(j.state==='ready')return j.result;if(j.state==='failed')throw new Error(j.error||'Analysis failed. Retry from the library.');await new Promise(r=>setTimeout(r,1000));}throw new Error('Still processing. You can return to this import in the library.');
+function pollDelay(signal:AbortSignal):Promise<void>{
+ return new Promise((resolve,reject)=>{
+  const finish=(error?:unknown)=>{clearTimeout(timer);signal.removeEventListener('abort',abort);document.removeEventListener('visibilitychange',visible);window.removeEventListener('pageshow',resume);error?reject(error):resolve()};
+  const abort=()=>finish(signal.reason??new DOMException('Cancelled','AbortError'));
+  const resume=()=>finish();const visible=()=>{if(document.visibilityState==='visible')resume()};
+  const timer=setTimeout(resume,1000);signal.addEventListener('abort',abort,{once:true});document.addEventListener('visibilitychange',visible);window.addEventListener('pageshow',resume);
+  if(signal.aborted)abort();
+ });
+}
+export async function waitJob(id:string,signal?:AbortSignal,timeoutMs=600_000):Promise<Record<string,string>>{
+ const controller=new AbortController();const abort=()=>controller.abort(signal?.reason??new DOMException('Cancelled','AbortError'));
+ const timeout=new Error('This request is still processing. Please retry.');const expires=Date.now()+timeoutMs;
+ const timer=setTimeout(()=>controller.abort(timeout),timeoutMs);signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
+ try{
+  while(true){
+   if(Date.now()>=expires)controller.abort(timeout);
+   if(controller.signal.aborted)throw controller.signal.reason;
+   const j=await api<{state:string;result:Record<string,string>;error:string}>('/jobs/'+id,undefined,undefined,{signal:controller.signal,cache:'no-store'});
+   if(j.state==='ready')return j.result;
+   if(j.state==='failed')throw new Error(j.error||'This request failed. Please retry.');
+   await pollDelay(controller.signal);
+  }
+ }catch(error){if(controller.signal.aborted)throw controller.signal.reason;throw error}
+ finally{clearTimeout(timer);signal?.removeEventListener('abort',abort)}
 }
