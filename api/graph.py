@@ -56,7 +56,7 @@ class Tx:
 
 class Graph:
     def __init__(self):
-        self.driver=GraphDatabase.driver(os.getenv('NEO4J_URI','bolt://127.0.0.1:17687'),auth=('neo4j',os.getenv('NEO4J_PASSWORD','kotoba-development-only')))
+        self.driver=GraphDatabase.driver(os.getenv('NEO4J_URI','bolt://127.0.0.1:17687'),auth=None)
     def read(self,fn):
         with self.driver.session() as s:return s.execute_read(lambda tx:fn(Tx(tx)))
     def initialize(self):

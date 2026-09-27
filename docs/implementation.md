@@ -117,6 +117,8 @@ evidence without increasing counts. Retain and report conflicting saved families
 instead of silently changing their mastery.
 
 All project-owned persistent data lives in git-ignored `data/` or `.runtime/`.
+Neo4j authentication is disabled for the local installation. Production Browser
+and Bolt use persistent loopback-only ports 17474 and 17688, respectively.
 Docker services use project-local bind directories, including image-declared
 storage paths. Production, acceptance and development are separate. Move database
 files only with stopped writers and verified copies. Keep the old application

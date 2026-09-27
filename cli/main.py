@@ -8,7 +8,7 @@ def environment(name):
  runtime=ROOT/'.runtime'/name;runtime.mkdir(parents=True,exist_ok=True);path=runtime/'environment.json'
  if path.exists():env=json.loads(path.read_text())
  else:
-  env={'NEO4J_PASSWORD':secrets.token_urlsafe(24),'KOTOBA_WORKER_TOKEN':secrets.token_urlsafe(32),'KOTOBA_PORT':'3010' if name=='production' else '3011'}
+  env={'KOTOBA_WORKER_TOKEN':secrets.token_urlsafe(32),'KOTOBA_PORT':'3010' if name=='production' else '3011'}
   path.write_text(json.dumps(env));path.chmod(0o600)
  env['KOTOBA_DATA_DIR']=str(ROOT/'data/docker'/name)
  return runtime,env
@@ -17,6 +17,7 @@ def compose(name,args,**kwargs):
  _,env=environment(name)
  if not kwargs.get('capture_output') and 'stdout' not in kwargs:kwargs['stdout']=sys.stderr
  files=['-f',str(ROOT/'compose.yaml')]
+ if name=='production':files+=['-f',str(ROOT/'compose.production.yaml')]
  if name=='acceptance':files+=['-f',str(ROOT/'compose.acceptance.yaml')]
  return subprocess.run(['docker','compose','-p','kotoba-v2-'+name,*files,*args],cwd=ROOT,env=os.environ|env,check=True,**kwargs)
 def start_ichiran():

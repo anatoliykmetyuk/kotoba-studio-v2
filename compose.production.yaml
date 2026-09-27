@@ -1,0 +1,8 @@
+services:
+  neo4j:
+    ports:
+      - "127.0.0.1:17474:7474"
+      - "127.0.0.1:17688:7687"
+    environment:
+      NEO4J_server_bolt_advertised__address: 127.0.0.1:17688
+      NEO4J_server_http_advertised__address: 127.0.0.1:17474

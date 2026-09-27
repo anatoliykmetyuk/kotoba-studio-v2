@@ -1,6 +1,15 @@
 # Agent and operator interface
 
-Run commands from the repository root. Output is JSON. The production API is `http://127.0.0.1:3010/api/v1`; the acceptance API uses port 3011. OpenAPI is at `/api/v1/openapi.json`. The application is intended for the owner and trusted tailnet members with access to this port. The graph API has full control of corpus data. Neo4j has no production host port; only the API connects to Bolt. Native worker endpoints additionally require a per-environment token held in a mode-0600 runtime file.
+Run commands from the repository root. Output is JSON. The production API is `http://127.0.0.1:3010/api/v1`; the acceptance API uses port 3011. OpenAPI is at `/api/v1/openapi.json`. The application is intended for the owner and trusted tailnet members with access to this port. The graph API has full control of corpus data. Neo4j Browser and Bolt are published on loopback only, without database authentication. Native worker endpoints additionally require a per-environment token held in a mode-0600 runtime file.
+
+## Local Neo4j Browser
+
+Production Neo4j Browser is available at http://127.0.0.1:17474/browser/ with
+Bolt at bolt://127.0.0.1:17688. Database authentication is disabled for this
+local installation. If Browser shows a connection form, leave the password empty and click Connect.
+Both published ports bind only to loopback. The production Compose override
+is applied automatically by the CLI and survives service restarts. Keep corpus
+writes behind the validated application API; Browser is for inspecting the graph.
 
 ## Reading the graph
 
