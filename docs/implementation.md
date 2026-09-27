@@ -88,8 +88,13 @@ Practice is entered within a lesson, with questions and distractors from that
 Text only. Answer APIs validate membership. All statuses are included by default
 so completed lessons remain practiceable. Matching shuffles answers and
 alternatives every challenge. Correct feedback advances automatically. Sentence
-reconstruction prepares its English prompt and all token audio before display,
-and each token click plays prepared pronunciation. No global Practice menu.
+reconstruction displays its tokens and controls immediately, with a placeholder
+while its English translation generates. Audio is lazy on click, and token
+placement never waits for it. Token pronunciations queue
+in click order and stop when advancing. Placed tokens can be reordered by drag.
+Each finite run shows the question number and total, then offers Practice again.
+Incorrect sentence answers offer an optional Show correct sentence disclosure;
+the correct sentence stays hidden until explicitly opened. No global Practice menu.
 
 Settings exposes manual app-update checks with explicit results and a separate
 Reload to update action for a ready update. The banner shares this state. Checks

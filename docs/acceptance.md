@@ -18,7 +18,7 @@ record elapsed time and every skip reason. The warmed matrix targets 20 minutes.
 | Imports and Ichiran | Real job progress and recovery; unchanged upstream segmentation and conjugation analysis; dictionary-only import without model inference; Latin text preserved without standalone vocabulary. |
 | Reader and language actions | Continuous text, base-form details and pronunciation, atomic New-to-Learning in both areas, retained Familiar/Known statuses, lazy cached sentence actions, and temporary phrase translation/audio without persistent corpus or media records. |
 | Overlays and selection | Shared word/phrase overlay, mouse and touch selection, copy controls, focus retention, background scroll lock, conditional touch dismissal, unchanged desktop reader geometry and nonzero safe-area insets. |
-| Persistence and practice | Stable settings saves, viewport bookmarks independent of furthest progress, no progress from open/restore/close, acknowledged offline progress recovery, completion preview/confirmation, and lesson-specific practice with prepared audio. |
+| Persistence and practice | Stable settings saves, viewport bookmarks independent of furthest progress, no progress from open/restore/close, acknowledged offline progress recovery, completion preview/confirmation, and finite lesson-specific practice, immediate sentence controls, lazy queued audio, reordering and optional answer hints. |
 | Operations and PWA | Trusted HTTPS, service-worker registration/update, cached reading, real outage recovery, backup/restore, retokenization preservation and idempotence, and isolated project-local storage. |
 
 Browser coverage uses simulated mobile Chromium, phone WebKit and iPad WebKit in
@@ -29,9 +29,61 @@ custom Tailscale HTTPS port 3010. Certificate-warning bypasses are not acceptabl
 
 ## Verified results
 
+
+Current UI and practice follow-up (2026-09-28): a fresh full-UI reviewer identified
+unowned import completion, mutable answers during grading, and hidden query errors.
+The fixes use one cancellable import observer, challenge/session identity guards,
+and shared retryable error UI. Independent input and update-lifecycle reviews
+also checked the global activation boundary and cross-tab service-worker updates.
+The final bounded practice source review found no remaining concrete defects.
+
+The shared activation/settings/update/selection/overlay matrix passed all 48 cases
+in 8.9 minutes across phone Chromium, phone WebKit, iPad WebKit in both orientations,
+and desktop Chromium/WebKit. Coverage includes native form/file actions, labels,
+checkboxes, popup controls/backdrops, both phrase-selection gestures, update
+failures/retries, and explicit reload after an update becomes ready.
+
+The focused backend practice tests passed all 8 cases. Practice now uses the same
+stored dictionary ranking as word details; the query starts from the selected Text
+index. The isolated profile read 4 tokens and 7 meanings with 234 database hits,
+avoiding the previous global 524-token scan. The 14 preparation/queue tests passed,
+including ordered playback, cancellation, shared preparation consumers, bounded
+waits and visibility recovery.
+
+A read-only production diagnosis found successful jobs queued behind eager audio
+preparation: 18 distinct requests (15 speech, 3 translation), with creation-to-ready
+times of 20.2–46.3 seconds. Polling paused for 44.1 seconds while seven jobs finished,
+consistent with the reported background/foreground transition. This was not a
+stuck worker; the precise trigger of multiple preparations was not established.
+The new flow renders the challenge immediately, generates only its translation on
+entry, and requests speech only on actual clicks.
+
+
+The focused practice/import/error run initially passed 18 cases, with five failures
+and one deliberate skip. Corrected metadata assertions, frame-timed feedback
+checks and spatial keyboard-target assertions resolved those failures. Six
+corrected/new cases passed in 2.3 minutes (with two Chromium-only transport-latency
+checks deliberately skipped in WebKit), followed by both keyboard checks in
+19.2 seconds. This includes the hidden answer disclosure, stale-grading reset
+protection, detached import completion, and real stopped-API error recovery.
+A paused acceptance worker proved that tokens, grading and advancement remain
+usable while translation and speech are pending, with no speech requested before
+clicking and no playback continuing after completion.
+
+The remaining device practice matrix passed 22 of 24 cases in 3.9 minutes.
+The two phone-WebKit landscape failures were test issues: assertion backoff missed
+850ms feedback, and a drag started at the viewport edge triggered normal
+49px auto-scroll, invalidating fixed target coordinates. Frame-based observation
+and centering the drag fixture retained the actual feedback, ordering and scroll
+assertions; both reruns passed in 21.7 seconds. No app workarounds were added for
+these failures. Final coverage spans all six mobile configurations and desktop
+Chromium/WebKit, including sequential real audio, immediate token placement,
+finite progress/completion, optional hints, wrapped-row drag, keyboard sort/cancel
+and tap removal. Phone, iPad and desktop screenshots were inspected.
+
 Popup and selection correction (2026-09-28): reproduced a suppressed pen click
-after a short touch pull, then added direct pen button activation and a body-level
-overlay. All eight expanded dismissal cases passed across the matrix and focused
+after a short touch pull, then added pen activation and a body-level
+overlay. The follow-up release below replaces local pen handling with one shared activation boundary. All eight expanded dismissal cases passed across the matrix and focused
 landscape rerun, covering close/speech controls, clipboard writes in Chromium,
 the complete outside gutter, late compatibility clicks, and drag rejection.
 Eight existing overlay/settings cases also passed (3.0 minutes).
@@ -84,7 +136,7 @@ library median 22.58 ms, reader 54.88 ms, and word details 33.67 ms. The maximum
 word-details sample was 267.95 ms. These describe one local corpus, not a load
 limit. The settings scalar-write path avoids a graph-wide scan; earlier focused
 measurements gave a 4.41 ms median. Cached pronunciation uses indexed read paths
-and prepared in-memory audio for requested practice challenges.
+and an in-memory cache for pronunciations requested by the user.
 
 Raw logs, traces, screenshots and migration receipts stay in git-ignored
 `.runtime/`, `test-results/` and `playwright-report/`. Backups remain in
@@ -113,7 +165,10 @@ private corpus text, database/audio files and backup paths.
 
 ## Deployment and publication
 
-The final shared-modal build is deployed on custom trusted HTTPS port 3010.
+The current UI and practice build is deployed on custom trusted HTTPS port 3010.
+Its six production PWA smoke checks passed in 7.6 seconds, and served HTML,
+service worker, JavaScript and CSS were byte-verified against the running
+container. API and worker readiness both passed.
 Desktop Chromium and WebKit passed at widths 1024, 1440 and 1920, including
 unchanged reader geometry, real clipboard copying, keyboard focus, mouse drags
 and progress preservation. The final affected-browser run passed 11 cases in
