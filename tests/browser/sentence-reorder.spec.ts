@@ -58,7 +58,10 @@ test('placed words reorder across wrapped rows with mouse, touch and pen without
  const count=await openSentence(page,request);
  const inputs:Input[]=info.project.name.startsWith('desktop')?['mouse','pen']:info.project.name.startsWith('ipad')?['touch','pen']:['touch'];
  for(const input of inputs){
-  await placeAll(page,count);const before=await order(page),source=answer(page).first();await source.scrollIntoViewIfNeeded();
+  await placeAll(page,count);const before=await order(page),source=answer(page).first();
+  // Keep this stationary reorder away from the viewport's auto-scroll edge.
+  // Merely making the first token visible can leave its center at y=24px.
+  await source.evaluate(element=>element.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'}));
   const boxes=await answer(page).evaluateAll(buttons=>buttons.map(button=>{const rect=button.getBoundingClientRect();return {id:Number((button as HTMLElement).dataset.piece),x:rect.x+rect.width/2,y:rect.y+rect.height/2,height:rect.height,visible:rect.y+rect.height<innerHeight-15}}));
   const target=boxes.find(box=>box.y>boxes[0].y+boxes[0].height/2&&box.visible);expect(target,'A wrapped answer row must be visible').toBeTruthy();
   const destination=before.indexOf(target!.id),expected=[...before];expected.splice(destination,0,...expected.splice(0,1));

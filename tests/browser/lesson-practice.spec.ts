@@ -158,8 +158,10 @@ test('practice counts questions, retains wrong answers, and finishes each exerci
    await page.locator('.answer-grid').getByRole('button',{name:wrong.meaning,exact:true}).click();
    await expect(page.locator('.practice-feedback')).toContainText('Incorrect');await expect(progress).toContainText('Question 1 of 2');
   }
-  await page.locator('.answer-grid').getByRole('button',{name:word.meaning,exact:true}).click();
-  await expect(page.locator('.practice-feedback')).toContainText('Correct');
+  // Observe brief feedback each browser frame; assertion retry backoff can
+  // otherwise miss the intentional 850ms display after a slow grading request.
+  const feedback=page.waitForFunction(()=>document.querySelector('.practice-feedback.correct')?.textContent?.startsWith('Correct'),undefined,{polling:'raf'});
+  await page.locator('.answer-grid').getByRole('button',{name:word.meaning,exact:true}).click();await feedback;
  }
  await expect(page.getByRole('heading',{name:'Practice complete',exact:true})).toBeVisible();
  await expect(progress).toContainText('2 of 2 completed');await expect(page.locator('.answer-grid')).toHaveCount(0);
@@ -172,7 +174,8 @@ test('practice counts questions, retains wrong answers, and finishes each exerci
   await expect(page.locator('.pieces button').first()).toBeVisible({timeout:150_000});
   const count=await page.locator('.pieces button').count();
   for(let i=0;i<count;i++)await page.locator(`.pieces [data-piece="${i}"]`).click();
-  await page.getByRole('button',{name:'Check sentence',exact:true}).click();await expect(page.locator('.practice-feedback')).toContainText('Correct');
+  const feedback=page.waitForFunction(()=>document.querySelector('.practice-feedback.correct')?.textContent?.startsWith('Correct'),undefined,{polling:'raf'});
+  await page.getByRole('button',{name:'Check sentence',exact:true}).click();await feedback;
  }
  await expect(page.getByRole('heading',{name:'Practice complete',exact:true})).toBeVisible();await expect(progress).toContainText('2 of 2 completed');
  await page.getByRole('button',{name:'Practice again',exact:true}).click();await expect(progress).toContainText('Question 1 of 2');
