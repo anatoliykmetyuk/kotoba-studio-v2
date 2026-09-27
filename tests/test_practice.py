@@ -25,7 +25,7 @@ def client():
                 else:os.environ[key]=value
 
 
-def import_lesson(client,title,lines):
+def import_lesson(client,title,lines,*,meanings=None):
     """Submit deterministic tokenizer fixtures through the actual worker boundary."""
     sentences=[];start=0
     for words in lines:
@@ -35,6 +35,7 @@ def import_lesson(client,title,lines):
             tokens.append({'surface':surface,'reading':reading,'baseReading':reading,'partOfSpeech':'名詞',
                            'start':position,'end':position+len(surface),
                            'selected':{'base':canonical,'baseReading':reading,'meaning':meaning}})
+            if meanings is not None:tokens[-1]['meanings']=meanings.get(surface,[])
             position+=len(surface)
         sentences.append({'body':body,'start':start,'end':start+len(body),'tokens':tokens});start+=len(body)
     submitted=client.post('/api/v1/imports',json={'title':title,'body':''.join(s['body'] for s in sentences)})
@@ -145,3 +146,61 @@ def test_lesson_beyond_global_limit_keeps_all_placements(client,lessons):
     # Creating a newer, long lesson must not hide older lessons from practice.
     old=practice(client,lessons[0])
     assert len(old['sentences'])==len(lessons[0]['sentences'])
+
+
+def test_matching_uses_primary_dictionary_sense_and_retains_alternatives(client,monkeypatch):
+    from api import domain
+    from api.graph import Tx
+    senses=[(2,'no sooner than; once; right after (often having negative consequences)'),
+            (3,"one's final moments"),(1,'last; final; latest'),(0,'end; conclusion')]
+    choices=[{'meaning':body,'sourceType':'JMdict','sense':f'jmdict:1293810:{ordinal}'} for ordinal,body in senses]
+    text=import_lesson(client,'Practice dictionary sense order',[
+        [('最後','さいご',''),('籠','かご','basket'),('接吻','せっぷん','kiss'),('譲り合う','ゆずりあう','give-and-take')]],
+        meanings={'最後':choices})
+    base=text['sentences'][0]['tokens'][0]['baseId']
+    stored=client.get('/api/v1/words/'+base).json()['meanings']
+    assert [m['body'] for m in stored]==[body for _,body in sorted(senses)]
+    before=[(m['id'],m['sourceKey'],m['body'],m['revision']) for m in stored]
+    def forbidden(*_,**__):raise AssertionError('Practice ordering must use stored lesson meanings without writes or dictionary calls')
+    with monkeypatch.context() as patch:
+        patch.setattr(app.state.graph,'write',forbidden)
+        patch.setattr(domain,'word_detail',forbidden)
+        patch.setattr(Tx,'snapshot',forbidden)
+        patch.setattr(domain,'analyze',forbidden)
+        pool=practice(client,text)
+    target=next(word for word in pool['words'] if word['baseId']==base)
+    assert target['meaning']=='end; conclusion'
+    assert pool['sentences'][0]['words'][0]['meaning']==target['meaning']
+    assert len(pool['words'])==4 and len(pool['sentences'][0]['words'])==4
+    assert pool['sentences'][0]['coverage']==0
+    for answer in ('end; conclusion','last; final; latest'):
+        result=client.post('/api/v1/practice/answer',json={'textId':text['id'],'kind':'matching',
+                           'targetId':base,'answer':answer,'eventId':str(uuid4())})
+        assert result.json()=={'correct':True}
+    assert [(m['id'],m['sourceKey'],m['body'],m['revision']) for m in client.get('/api/v1/words/'+base).json()['meanings']]==before
+
+
+def test_practice_orders_numeric_entries_and_senses_without_losing_empty_tokens(client):
+    choices=[{'meaning':body,'sourceType':'JMdict','sense':key} for key,body in [
+        ('jmdict:10:0','tenth entry'),('jmdict:2:10','tenth sense'),
+        ('jmdict:2:2','second sense'),('jmdict:2:1','first sense')]]
+    text=import_lesson(client,'Practice numeric dictionary order',[
+        [('多義語順序','たぎごじゅんじょ',''),('未定義見出し','みていぎみだし','')]],meanings={'多義語順序':choices})
+    pool=practice(client,text)
+    assert len(pool['words'])==1 and pool['words'][0]['meaning']=='first sense'
+    assert [word['meaning'] for word in pool['sentences'][0]['words']]==['first sense','']
+    detail=client.get('/api/v1/words/'+pool['words'][0]['baseId']).json()
+    assert [meaning['body'] for meaning in detail['meanings']]==['first sense','second sense','tenth sense','tenth entry']
+
+
+def test_practice_prefers_canonical_meaning_over_an_inflected_forms_alternative(client):
+    choices=[{'meaning':'form-specific alternative','base':'順位試験した','sourceType':'JMdict','sense':'jmdict:1:0'},
+             {'meaning':'canonical meaning','base':'順位試験する','sourceType':'JMdict','sense':'jmdict:9:0'}]
+    text=import_lesson(client,'Practice canonical meaning owner',[[('順位試験した','じゅんいしけんした','','順位試験する')]],
+                       meanings={'順位試験した':choices})
+    pool=practice(client,text)
+    assert pool['words'][0]['base']=='順位試験する'
+    assert pool['words'][0]['meaning']=='canonical meaning'
+    token=text['sentences'][0]['tokens'][0]
+    assert len(client.get('/api/v1/words/'+token['wordId']).json()['meanings'])==2
+    assert client.get('/api/v1/words/'+token['baseId']).json()['meanings'][0]['body']=='canonical meaning'

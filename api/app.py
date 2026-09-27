@@ -420,10 +420,17 @@ def practice(textId:str=QueryParam(min_length=1),area:Literal['reading','listeni
     def lesson(t):
         if t.get(textId)['type']!='Text':raise Missing('Text not found')
         rows=t.run('''MATCH (t:Text {id:$text})-[:PLACEMENT]->(p)-[:SENTENCE]->(s)
+          USING INDEX t:Text(id)
           MATCH (p)-[:TOKEN]->(o)-[:WORD]->(w)-[:BASE_FORM]->(b)-[:STATUS]->(st {area:$area})
-          WITH t,p,s,o,w,b,st,reduce(unique=[],m IN [(b)-[:HAS_MEANING]->(m) | m.body]+[(w)-[:HAS_MEANING]->(m) | m.body] | CASE WHEN m IN unique THEN unique ELSE unique+[m] END) AS meanings
+          CALL (b,w) {
+            UNWIND CASE WHEN b=w THEN [b] ELSE [b,w] END AS owner
+            MATCH (owner)-[:HAS_MEANING]->(m:Meaning)
+            WITH b,owner,m ORDER BY CASE WHEN owner=b THEN 0 ELSE 1 END,'''+domain.MEANING_ORDER+'''
+            RETURN head(collect(m.body)) AS meaning
+          }
+          WITH t,p,s,o,w,b,st,meaning
           ORDER BY p.ordinal,o.ordinal
-          WITH t,p,s,collect({surface:w.surface,reading:o.reading,occurrenceId:o.id,base:b.surface,baseReading:b.reading,meaning:coalesce(head(meanings),''),baseId:b.id,state:st.state,wordId:w.id,start:o.start,end:o.end}) AS words,
+          WITH t,p,s,collect({surface:w.surface,reading:o.reading,occurrenceId:o.id,base:b.surface,baseReading:b.reading,meaning:coalesce(meaning,''),baseId:b.id,state:st.state,wordId:w.id,start:o.start,end:o.end}) AS words,
                sum(CASE st.state WHEN 'known' THEN 1.0 ELSE 0.0 END)/count(*) AS coverage
           WHERE any(w IN words WHERE w.state IN $states)
           RETURN t.id AS textId,t.title AS title,t.textState AS textState,p.id AS occurrenceId,s.id AS sentenceId,s.body AS body,p.start AS start,p.end<=t.cursor AS seen,words,coverage

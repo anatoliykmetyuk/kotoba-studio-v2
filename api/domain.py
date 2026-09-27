@@ -8,6 +8,12 @@ from api.language import analyze
 from api.vocabulary import eligible_tokens,latin_word
 
 AREAS=('reading','listening');STATES=('new','learning','familiar','known')
+# Stored dictionary entry and sense numbers define presentation order. Graph
+# relationship iteration is unordered and must not select a practice answer.
+MEANING_ORDER="""m.sourceType,
+    CASE WHEN m.sourceKey STARTS WITH 'jmdict:' THEN toInteger(split(m.sourceKey,':')[1]) END,
+    CASE WHEN m.sourceKey STARTS WITH 'jmdict:' THEN toInteger(split(m.sourceKey,':')[2]) END,
+    m.sourceKey,m.body"""
 def status_nodes(t,owner):
     return {r['s']['area']:r['s'] for r in t.run('MATCH (w:Entity {id:$id})-[:STATUS]->(s) RETURN properties(s) AS s',id=owner)}
 def create_statuses(t,owner,states=None):
@@ -134,10 +140,7 @@ def library(t):
 def word_meanings(t,id):
     meanings=t.run('''MATCH (w:Word {id:$id})-[:BASE_FORM]->(b) WITH [w,b] AS owners
     UNWIND owners AS owner MATCH (owner)-[:HAS_MEANING]->(m:Meaning)
-    RETURN DISTINCT properties(m) AS m ORDER BY m.sourceType,
-    CASE WHEN m.sourceKey STARTS WITH 'jmdict:' THEN toInteger(split(m.sourceKey,':')[1]) END,
-    CASE WHEN m.sourceKey STARTS WITH 'jmdict:' THEN toInteger(split(m.sourceKey,':')[2]) END,
-    m.sourceKey,m.body''',id=id)
+    RETURN DISTINCT properties(m) AS m ORDER BY '''+MEANING_ORDER,id=id)
     return [x['m'] for x in meanings]
 
 def word_detail(t,id):

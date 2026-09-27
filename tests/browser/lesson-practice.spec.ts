@@ -102,3 +102,24 @@ test('a small lesson keeps its own limited exercises and an empty lesson stays e
  await page.getByRole('button',{name:'Build a sentence',exact:true}).click();
  await expect(page.getByRole('heading',{name:'No matching sentences',exact:true})).toBeVisible();
 });
+
+test('matching offers the primary dictionary meaning for 最後',async({page,request},info)=>{
+ const text=await importLesson(request,'Primary meaning practice acceptance','最後。籠。接吻。譲り合う。');
+ const pool=await practicePool(request,text.id),last=pool.words.find(word=>word.base==='最後');
+ expect(last).toBeTruthy();expect(last!.meaning).toBe('end; conclusion');
+ await enterPractice(page,text);
+ for(let round=0;round<pool.words.length;round++){
+  const heading=page.locator('.practice-card h2');await expect(heading).toBeVisible();
+  const base=await heading.innerText(),word=pool.words.find(item=>item.base===base)!;
+  const challenge=await page.locator('[data-challenge]').getAttribute('data-challenge');
+  const answer=page.locator('.answer-grid').getByRole('button',{name:word.meaning,exact:true});await expect(answer).toBeVisible();
+  if(base==='最後'){
+   await expect(answer).toHaveText('end; conclusion');
+   await page.screenshot({path:info.outputPath('last-primary-meaning.png')});
+   await answer.click();await expect(page.locator('.practice-feedback')).toContainText('Correct');return;
+  }
+  await answer.click();await expect(page.locator('.practice-feedback')).toContainText('Correct');
+  await expect(page.locator('[data-challenge]')).not.toHaveAttribute('data-challenge',challenge!);
+ }
+ throw new Error('The lesson did not present 最後 during its first practice cycle');
+});
