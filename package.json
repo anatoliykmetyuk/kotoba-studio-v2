@@ -1,0 +1,27 @@
+{
+  "name": "kotoba-studio-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build && node scripts/build_pwa.mjs",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "@tanstack/react-query": "^5.90.0",
+    "lucide-react": "^0.577.0"
+  },
+  "devDependencies": {
+    "vite": "8.1.5",
+    "@vitejs/plugin-react": "6.0.2",
+    "typescript": "5.9.3",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/node": "22.19.19",
+    "@playwright/test": "1.58.2",
+    "openapi-typescript": "^7.13.0"
+  }
+}

@@ -1,0 +1,5 @@
+vocabulary <https://kotoba.local/provenance#> as provenance {
+ extends <https://kotoba.local/core#> as core
+ concept Source < core:Entity [ restricts core:url to exactly 1 restricts core:sourceType to exactly 1 ]
+ concept Provenance < core:Entity [ restricts core:details to exactly 1 ]
+}

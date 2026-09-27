@@ -1,0 +1,5 @@
+vocabulary <https://kotoba.local/media#> as media {
+ extends <https://kotoba.local/core#> as core
+ concept Speech < core:Entity [ restricts core:pronunciation to exactly 1 restricts core:voice to exactly 1 restricts core:speed to exactly 1 restricts core:engine to exactly 1 restricts core:asset to exactly 1 restricts core:jobState to exactly 1 ]
+ concept Translation < core:Entity [ restricts core:body to exactly 1 restricts core:meaning to exactly 1 ]
+}

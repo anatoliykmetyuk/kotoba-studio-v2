@@ -1,0 +1,38 @@
+# Shared local dictionary service for native workers and container API deployments.
+# Run once with the fixed project name kotoba-v2-ichiran.
+services:
+  ichiran-db:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/ichiran/Dockerfile.postgres
+    environment:
+      POSTGRES_PASSWORD: ${ICHIRAN_DB_PASSWORD:-ichiran-local-only}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ./data/docker/ichiran/postgresql:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "psql -U postgres -d jmdict -tAc \"SELECT to_regclass('public.kotoba_dictionary_ready') IS NOT NULL\" | grep -q t"]
+      interval: 5s
+      timeout: 5s
+      retries: 120
+      start_period: 30s
+  ichiran:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile.ichiran
+    environment:
+      ICHIRAN_DB_HOST: ichiran-db
+      ICHIRAN_DB_PASSWORD: ${ICHIRAN_DB_PASSWORD:-ichiran-local-only}
+    depends_on:
+      ichiran-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${KOTOBA_ICHIRAN_PORT:-8091}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 60s

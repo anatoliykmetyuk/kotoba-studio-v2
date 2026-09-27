@@ -1,0 +1,29 @@
+vocabulary <https://kotoba.local/relations#> as rel {
+ extends <https://kotoba.local/core#> as core
+ extends <https://kotoba.local/corpus#> as corpus
+ extends <https://kotoba.local/learning#> as learning
+ extends <https://kotoba.local/provenance#> as provenance
+ extends <https://kotoba.local/media#> as media
+ extends <https://kotoba.local/operations#> as operations
+ relation CONTAINS [ from corpus:Folder to corpus:Text ]
+ relation PLACEMENT [ from corpus:Text to corpus:SentenceOccurrence ]
+ relation SENTENCE [ from corpus:SentenceOccurrence to corpus:Sentence functional ]
+ relation TOKEN [ from corpus:SentenceOccurrence to corpus:WordOccurrence ]
+ relation WORD [ from corpus:WordOccurrence to corpus:Word functional ]
+ relation HAS_MEANING [ from corpus:Word to corpus:Meaning ]
+ relation BASE_FORM [ from corpus:Word to corpus:Word functional ]
+ relation STATUS [ from core:Entity to learning:LearningStatus ]
+ relation OCCURRED_IN [ from learning:Encounter to corpus:WordOccurrence functional ]
+ relation PROVENANCE [ from core:Entity to provenance:Provenance ]
+ relation SOURCE [ from provenance:Provenance to provenance:Source functional ]
+ relation PRONUNCIATION [ from core:Entity to media:Speech ]
+ relation TRANSLATION [ from core:Entity to media:Translation ]
+ relation PREVIOUS [ from corpus:Text to corpus:Text ]
+ relation PHRASE_MEMBER [ from corpus:Phrase to corpus:PhraseMember ]
+ relation MEMBER_WORD [ from corpus:PhraseMember to corpus:Word functional ]
+ ref concept corpus:PhraseMember < [ restricts MEMBER_WORD to exactly 1 ]
+ relation PHRASE [ from corpus:Text to corpus:Phrase ]
+ ref concept corpus:Word < [ restricts BASE_FORM to exactly 1 ]
+ ref concept corpus:WordOccurrence < [ restricts WORD to exactly 1 ]
+ ref concept corpus:SentenceOccurrence < [ restricts SENTENCE to exactly 1 ]
+}

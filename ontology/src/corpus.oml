@@ -1,0 +1,12 @@
+vocabulary <https://kotoba.local/corpus#> as corpus {
+ extends <https://kotoba.local/core#> as core
+ concept Folder < core:Entity [ restricts core:name to exactly 1 ]
+ concept Text < core:Entity [ restricts core:title to exactly 1 restricts core:body to exactly 1 restricts core:textState to exactly 1 restricts core:cursor to exactly 1 restricts core:archived to exactly 1 ]
+ concept Sentence < core:Entity [ restricts core:body to exactly 1 ]
+ concept SentenceOccurrence < core:Entity [ restricts core:ordinal to exactly 1 restricts core:start to exactly 1 restricts core:end to exactly 1 ]
+ concept Word [ key core:surface ] < core:Entity [ restricts core:surface to exactly 1 restricts core:reading to exactly 1 restricts core:partOfSpeech to exactly 1 restricts core:family to exactly 1 ]
+ concept Meaning < core:Entity [ restricts core:body to exactly 1 restricts core:reading to exactly 1 restricts core:partOfSpeech to exactly 1 restricts core:sourceType to exactly 1 restricts core:sourceKey to exactly 1 ]
+ concept WordOccurrence < core:Entity [ restricts core:ordinal to exactly 1 restricts core:start to exactly 1 restricts core:end to exactly 1 restricts core:reading to exactly 1 ]
+ concept Phrase < core:Entity [ restricts core:surface to exactly 1 restricts core:meaning to exactly 1 ]
+ concept PhraseMember < core:Entity [ restricts core:ordinal to exactly 1 ]
+}

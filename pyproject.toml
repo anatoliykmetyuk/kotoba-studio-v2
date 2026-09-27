@@ -1,0 +1,11 @@
+[project]
+name = "kotoba-studio-v2"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = ["fastapi==0.139.2", "uvicorn==0.51.0", "neo4j>=6,<7", "httpx==0.28.1", "jaconv==0.5.0", "python-multipart>=0.0.22", "typer>=0.20,<1"]
+[dependency-groups]
+dev = ["pytest==9.1.1"]
+mac = ["kokoro-mlx[ja]==0.1.2"]
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

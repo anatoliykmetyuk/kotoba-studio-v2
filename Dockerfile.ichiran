@@ -1,0 +1,22 @@
+FROM debian:bookworm-slim
+ARG ICHIRAN_REVISION=ea9583368e67cad22d94abae8dbcc8df96d99bcd
+ARG JMDICTDB_REVISION=c9c82328d0ba5b15c496c4a32116da105be29e4c
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git sbcl locales libssl3 postgresql-client \
+    && rm -rf /var/lib/apt/lists/* \
+    && localedef -i en_US -c -f UTF-8 en_US.UTF-8
+ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+WORKDIR /root
+RUN curl --fail --location --retry 3 https://beta.quicklisp.org/quicklisp.lisp -o quicklisp.lisp \
+    && echo '4a7a5c2aebe0716417047854267397e24a44d0cce096127411e9ce9ccfeb2c17  quicklisp.lisp' | sha256sum --check \
+    && sbcl --non-interactive --load quicklisp.lisp --eval '(quicklisp-quickstart:install :dist-url "http://beta.quicklisp.org/dist/quicklisp/2026-01-01/distinfo.txt")' \
+       --eval '(ql-util:without-prompting (ql:add-to-init-file))'
+RUN git clone https://github.com/tshatrov/ichiran.git /root/quicklisp/local-projects/ichiran \
+    && git -C /root/quicklisp/local-projects/ichiran checkout "$ICHIRAN_REVISION" \
+    && git clone https://gitlab.com/yamagoya/jmdictdb.git /root/jmdictdb \
+    && git -C /root/jmdictdb checkout "$JMDICTDB_REVISION"
+COPY services/ichiran/settings.lisp /root/quicklisp/local-projects/ichiran/settings.lisp
+RUN sbcl --non-interactive --eval '(ql:quickload (list :ichiran :hunchentoot))'
+COPY services/ichiran/server.lisp /app/server.lisp
+COPY services/ichiran/start.sh /app/start.sh
+EXPOSE 8080
+CMD ["bash", "/app/start.sh"]

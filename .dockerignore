@@ -1,0 +1,13 @@
+.git
+.venv
+node_modules
+.runtime
+data
+test-results
+ontology/build
+ontology/.gradle
+
+playwright-report
+.agents/worktrees
+.env
+.env.*

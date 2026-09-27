@@ -1,0 +1,10 @@
+FROM postgres:18.0-bookworm
+ARG ICHIRAN_DB_URL=https://github.com/tshatrov/ichiran/releases/download/ichiran-260118/ichiran-260118.pgdump
+ARG ICHIRAN_DB_SHA256=98a44e2cc88a65677da8b1f7124e7d6c904253eb1aae0ef16d2c7cc1dacdba82
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/* \
+    && localedef -i ja_JP -c -f UTF-8 -A /usr/share/locale/locale.alias ja_JP.UTF-8 \
+    && curl --fail --location --retry 3 "$ICHIRAN_DB_URL" -o /ichiran.pgdump \
+    && echo "$ICHIRAN_DB_SHA256  /ichiran.pgdump" | sha256sum --check
+COPY services/ichiran/init-db.sh /docker-entrypoint-initdb.d/10-ichiran.sh
+
+COPY public/licenses /usr/share/doc/ichiran

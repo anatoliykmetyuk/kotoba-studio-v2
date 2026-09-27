@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog" prefer="public">
+ <rewriteURI uriStartString="https://kotoba.local/" rewritePrefix="src/"/>
+ <uri name="http://www.w3.org/2001/XMLSchema" uri="src/XMLSchema.oml"/>
+</catalog>

@@ -1,0 +1,13 @@
+.reader-settings .reader-range-setting{display:flex;flex-direction:column;gap:2px}
+.reader-range-setting>label{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px}
+.reader-range-setting output{font-variant-numeric:tabular-nums;font-weight:650}
+.reader-settings input.reader-range{appearance:none;-webkit-appearance:none;display:block;box-sizing:border-box;height:44px;min-height:44px;width:100%;padding:0;margin:0;border:0;border-radius:8px;background:transparent;cursor:ew-resize;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.reader-settings input.reader-range::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--line)}
+.reader-settings input.reader-range::-moz-range-track{height:6px;border-radius:3px;background:var(--line)}
+.reader-settings input.reader-range::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;box-sizing:border-box;width:44px;height:44px;margin-top:-19px;border:0;border-radius:50%;background:radial-gradient(circle,var(--green) 0 13px,var(--card) 13px 16px,transparent 16px)}
+.reader-settings input.reader-range::-moz-range-thumb{box-sizing:border-box;width:44px;height:44px;border:0;border-radius:50%;background:radial-gradient(circle,var(--green) 0 13px,var(--card) 13px 16px,transparent 16px)}
+.reader-settings input.reader-range:focus{outline:none}
+.reader-settings input.reader-range:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.reader-settings .check-label{min-height:44px}
+
+.dictionary-attribution{font-size:12px;line-height:1.6;color:var(--muted);margin:0}.dictionary-attribution a{text-decoration:underline;text-underline-offset:2px}

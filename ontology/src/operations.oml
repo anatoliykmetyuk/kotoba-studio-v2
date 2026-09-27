@@ -1,0 +1,9 @@
+vocabulary <https://kotoba.local/operations#> as operations {
+ extends <https://kotoba.local/core#> as core
+ concept Job < core:Entity [ restricts core:kind to exactly 1 restricts core:payload to exactly 1 restricts core:result to exactly 1 restricts core:error to exactly 1 restricts core:jobState to exactly 1 restricts core:lease to exactly 1 restricts core:attempts to exactly 1 ]
+ concept Settings < core:Entity [ restricts core:payload to exactly 1 ]
+ concept Audit < core:Entity [ restricts core:actor to exactly 1 restricts core:action to exactly 1 restricts core:details to exactly 1 ]
+ concept Migration < core:Entity [ restricts core:payload to exactly 1 ]
+ concept Schema < core:Entity [ restricts core:digest to exactly 1 restricts core:version to exactly 1 ]
+ concept Mutation < core:Entity [ restricts core:result to exactly 1 ]
+}

@@ -1,0 +1,22 @@
+buildscript {
+ repositories { mavenCentral() }
+ dependencies {
+  classpath 'io.opencaesar.oml:oml-validate-gradle:2.13.0'
+  classpath 'io.opencaesar.oml:oml-convert-gradle:2.13.0'
+ }
+}
+apply plugin: 'base'
+task validateOml(type: io.opencaesar.oml.validate.OmlValidateTask) {
+ inputCatalogPath = file('catalog.xml')
+ outputReportPath = file('build/validation.txt')
+}
+task prepareCatalog {
+ doLast { file('build/json').mkdirs(); file('build/json/catalog.xml').text = file('catalog.xml').text }
+}
+task convertOml(type: io.opencaesar.oml.convert.OmlConvertTask, dependsOn: [validateOml, prepareCatalog]) {
+ inputCatalogPath = file('catalog.xml')
+ outputCatalogPath = file('build/json/catalog.xml')
+ outputFileExtension = 'omljson'
+ useCatalog = true
+}
+tasks.named('build') { dependsOn convertOml }

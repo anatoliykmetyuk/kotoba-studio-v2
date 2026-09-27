@@ -1,0 +1,6 @@
+vocabulary <https://kotoba.local/learning#> as learning {
+ extends <https://kotoba.local/core#> as core
+ concept LearningStatus < core:Entity [ restricts core:area to exactly 1 restricts core:state to exactly 1 ]
+ concept Encounter < core:Entity [ restricts core:area to exactly 1 restricts core:evidence to exactly 1 ]
+ concept Activity < core:Entity [ restricts core:day to exactly 1 restricts core:kind to exactly 1 restricts core:amount to exactly 1 restricts core:details to exactly 1 ]
+}

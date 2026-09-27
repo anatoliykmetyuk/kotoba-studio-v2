@@ -1,0 +1,104 @@
+import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
+import type {Example,TextItem} from '../../web/src/api';
+
+async function importLesson(request:APIRequestContext,title:string,body:string):Promise<TextItem>{
+ const response=await request.post('/api/v1/imports',{data:{title,body,folder:'Acceptance'}});expect(response.ok()).toBeTruthy();
+ const submitted=await response.json();let textId=submitted.textId;
+ if(!textId)await expect.poll(async()=>{const job=await (await request.get('/api/v1/jobs/'+submitted.jobId)).json();expect(job.state,job.error).not.toBe('failed');textId=job.result.textId;return job.state},{timeout:120_000}).toBe('ready');
+ const text=await (await request.get('/api/v1/texts/'+textId)).json();
+ expect((await request.patch('/api/v1/texts/'+textId,{data:{archived:false}})).ok()).toBeTruthy();
+ return text;
+}
+async function practicePool(request:APIRequestContext,textId:string){
+ const response=await request.get('/api/v1/practice?'+new URLSearchParams({textId,states:'new,learning,familiar,known'}));
+ expect(response.ok()).toBeTruthy();return response.json() as Promise<{words:Example['words'];sentences:Example[]}>;
+}
+async function enterPractice(page:Page,text:TextItem){
+ await page.goto('/#'+text.id);await expect(page.locator('.reader')).toBeVisible();
+ await page.locator('.reader-finish').getByRole('button',{name:'Practice',exact:true}).click();
+ await expect(page.locator('.practice-page')).toHaveAttribute('data-text-id',text.id);
+ await expect(page.locator('.practice-page .page-heading')).toContainText(text.title);
+ await expect(page).toHaveURL(new RegExp('#'+text.id+'\\?mode=practice$'));
+ await page.getByLabel('Include all statuses').check();
+}
+
+test('finish a lesson and practice only its words, distractors and prepared sentences',async({page,request},info)=>{
+ test.setTimeout(240_000);
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ const first=await importLesson(request,'Lesson practice animals','猫は魚を見ます。\n鳥は空を飛びます。');
+ const second=await importLesson(request,'Lesson practice outdoors','犬と馬は山を歩きます。\n牛は草を食べます。');
+ await request.patch('/api/v1/settings',{data:{area:'reading',theme:'light'}});
+ await request.put('/api/v1/texts/'+first.id+'/status',{data:{state:'new'}});
+ const pool=await practicePool(request,first.id),other=await practicePool(request,second.id);
+ const lessonBases=new Set(first.sentences.flatMap(sentence=>sentence.tokens.map(word=>word.baseId)));
+ expect(pool.words.length).toBeGreaterThan(3);expect(pool.words.every(word=>lessonBases.has(word.baseId))).toBeTruthy();
+ expect(pool.sentences.every(sentence=>sentence.textId===first.id)).toBeTruthy();
+ expect(other.words.some(word=>!lessonBases.has(word.baseId))).toBeTruthy();
+ await page.goto('/');
+ await expect(page.getByRole('heading',{name:'Library',exact:true})).toBeVisible();
+ await expect(page.locator('nav').getByRole('button',{name:'Practice',exact:true})).toHaveCount(0);
+ await page.goto('/#'+first.id);await expect(page.locator('.reader')).toBeVisible();
+ await page.getByRole('button',{name:'Complete text',exact:true}).click();
+ const confirmation=page.getByRole('dialog',{name:'Complete lesson',exact:true});
+ await expect(confirmation).toBeVisible();
+ const preview=await(await request.get('/api/v1/texts/'+first.id+'/completion')).json();
+ await expect(confirmation).toContainText(String(preview.wordCount));
+ await confirmation.getByRole('button',{name:'Cancel',exact:true}).click();
+ expect((await(await request.get('/api/v1/texts/'+first.id)).json()).textState).toBe('new');
+ await page.getByRole('button',{name:'Complete text',exact:true}).click();
+ await expect(confirmation).toBeVisible();await confirmation.getByRole('button',{name:'Complete lesson',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Mark as New',exact:true})).toBeVisible();
+ const completed=await (await request.get('/api/v1/texts/'+first.id)).json() as TextItem;
+ expect(completed.textState).toBe('completed');
+ await page.locator('.reader-finish').getByRole('button',{name:'Practice',exact:true}).click();
+ await expect(page.locator('.practice-page')).toHaveAttribute('data-text-id',first.id);
+ await page.getByLabel('Include all statuses').check();
+ for(let round=0;round<3;round++){
+  await expect(page.locator('.answer-grid button').first()).toBeVisible();
+  const challenge=await page.locator('[data-challenge]').getAttribute('data-challenge');
+  const base=await page.locator('.practice-card h2').innerText();const word=pool.words.find(word=>word.base===base);expect(word).toBeTruthy();
+  const meanings=await page.locator('.answer-grid button').allTextContents();
+  expect(meanings.every(meaning=>pool.words.some(word=>word.meaning===meaning))).toBeTruthy();
+  await page.locator('.answer-grid').getByRole('button',{name:word!.meaning,exact:true}).click();
+  await expect(page.locator('.practice-feedback')).toContainText('Correct');
+  await expect(page.locator('[data-challenge]')).not.toHaveAttribute('data-challenge',challenge!);
+ }
+ await page.getByRole('button',{name:'Build a sentence',exact:true}).click();
+ await expect(page.locator('.pieces button').first()).toBeVisible({timeout:150_000});
+ await expect(page.locator('.sentence-translation')).not.toBeEmpty();
+ const assembled=await page.locator('.pieces button').evaluateAll(buttons=>buttons.sort((a,b)=>Number((a as HTMLElement).dataset.piece)-Number((b as HTMLElement).dataset.piece)).map(button=>button.textContent).join(''));
+ expect(first.sentences.some(sentence=>sentence.body===assembled)).toBeTruthy();
+ await page.screenshot({path:`test-results/${info.project.name}-lesson-practice.png`});
+ await page.locator('audio').evaluate(audio=>{audio.dataset.played='false';audio.addEventListener('ended',()=>{audio.dataset.played='true'},{once:true})});
+ await page.locator('.pieces [data-piece="0"]').tap();
+ await expect(page.locator('audio')).toHaveAttribute('src',/^blob:/);
+ await expect(page.locator('audio')).toHaveAttribute('data-played','true',{timeout:30_000});
+ expect(await page.locator('audio').evaluate((audio:HTMLAudioElement)=>audio.currentTime)).toBeGreaterThan(0);
+ const count=await page.locator('.pieces button').count();
+ for(let index=1;index<count;index++)await page.locator(`.pieces [data-piece="${index}"]`).tap();
+ await page.getByRole('button',{name:'Check sentence',exact:true}).click();
+ await expect(page.locator('.practice-feedback')).toContainText('Correct');
+ await page.getByRole('button',{name:'Back to lesson',exact:true}).click();
+ await expect(page.locator('.reader')).toBeVisible();await expect(page).toHaveURL(new RegExp('#'+first.id+'$'));
+ await enterPractice(page,second);
+ await expect(page.locator('.answer-grid button').first()).toBeVisible();
+ const secondBase=await page.locator('.practice-card h2').innerText();
+ expect(other.words.some(word=>word.base===secondBase)).toBeTruthy();
+ await page.reload();await expect(page.locator('.practice-page')).toHaveAttribute('data-text-id',second.id);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBeTruthy();
+ expect(errors).toEqual([]);
+});
+
+test('a small lesson keeps its own limited exercises and an empty lesson stays empty',async({page,request})=>{
+ const single=await importLesson(request,'Lesson practice single word','桜。');
+ await enterPractice(page,single);await expect(page.locator('.answer-grid button')).toHaveCount(1);
+ await page.getByRole('button',{name:'Build a sentence',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'No matching sentences',exact:true})).toBeVisible();
+ await expect(page.locator('.pieces button')).toHaveCount(0);
+ const empty=await importLesson(request,'Lesson practice no vocabulary','Plain English only.');
+ await enterPractice(page,empty);
+ await expect(page.getByRole('heading',{name:'No matching words',exact:true})).toBeVisible();
+ await expect(page.locator('.answer-grid button')).toHaveCount(0);
+ await page.getByRole('button',{name:'Build a sentence',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'No matching sentences',exact:true})).toBeVisible();
+});

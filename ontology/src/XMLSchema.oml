@@ -1,0 +1,9 @@
+// Minimal declarations of OML-recognized standard datatypes, not custom types.
+vocabulary <http://www.w3.org/2001/XMLSchema#> as xsd {
+    scalar string
+    scalar boolean
+    scalar anyURI
+    scalar dateTimeStamp
+ scalar integer
+ scalar decimal
+}
