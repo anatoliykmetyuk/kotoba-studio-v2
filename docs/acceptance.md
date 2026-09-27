@@ -30,6 +30,15 @@ custom Tailscale HTTPS port 3010. Certificate-warning bypasses are not acceptabl
 ## Verified results
 
 
+Five-question session limit (2026-09-28, expedited at the user's request): both
+exercise types sample at most five eligible questions, and sentence candidates
+deduplicate by Sentence identity. Full-lesson distractors remain available.
+The production build and fresh independent source review passed. An attempted
+broader browser run hit cold language-job/grading waits and was stopped when the
+user requested fast tracking; that run is not reported as passing. No backend,
+query or ontology changes were needed for this limit.
+
+
 Current UI and practice follow-up (2026-09-28): a fresh full-UI reviewer identified
 unowned import completion, mutable answers during grading, and hidden query errors.
 The fixes use one cancellable import observer, challenge/session identity guards,

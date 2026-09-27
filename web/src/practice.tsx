@@ -5,23 +5,29 @@ import {api,waitJob,type Area,type Example} from './api';
 import type {Pronunciation} from './speech';
 import {SentenceAssembly} from './sentence-assembly';
 const empty:Example[]=[];const emptyWords:Example['words']=[];
+const sessionLimit=5;
 function shuffle<T>(items:readonly T[]):T[]{const result=[...items];for(let i=result.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[result[i],result[j]]=[result[j],result[i]]}return result}
 const slice=(s:string,a:number,b?:number)=>Array.from(s).slice(a,b).join('');
 
 export function Practice({textId,title,onClose,area,onError,speak,enqueue,stopSpeech}:{textId:string;title:string;onClose:()=>void;area:Area;onError:(e:string)=>void;speak:(input:Pronunciation)=>Promise<void>;enqueue:(input:Pronunciation)=>void;stopSpeech:()=>void}){
  const [showSentence,setShowSentence]=useState(false);const [run,setRun]=useState(0);const [session,setSession]=useState(0);const [kind,setKind]=useState<'matching'|'sentence'>('matching');const [index,setIndex]=useState(0);const [answer,setAnswer]=useState('');const [result,setResult]=useState<boolean|null>(null);const [all,setAll]=useState(true);const [pieces,setPieces]=useState<number[]>([]);const [checking,setChecking]=useState(false);
  const {data,isLoading,error,refetch}=useQuery({queryKey:['practice',textId,area,all],refetchOnWindowFocus:false,queryFn:({signal})=>api<{words:Example['words'];sentences:Example[]}>('/practice?'+new URLSearchParams({textId,area,states:all?'new,learning,familiar,known':'learning,familiar'}),undefined,undefined,{signal})});
- const words=useMemo(()=>shuffle(data?.words??emptyWords),[data?.words,run]);
- const examples=useMemo(()=>shuffle((data?.sentences??empty).filter(s=>s.words.length>=2&&s.body.length<=160)),[data?.sentences,run]);
+ const wordPool=data?.words??emptyWords;
+ const words=useMemo(()=>shuffle(wordPool).slice(0,sessionLimit),[wordPool,run]);
+ const examples=useMemo(()=>{
+  const eligible=(data?.sentences??empty).filter(s=>s.words.length>=2&&s.body.length<=160);
+  const unique=[...new Map(eligible.map(sentence=>[sentence.sentenceId,sentence])).values()];
+  return shuffle(unique).slice(0,sessionLimit);
+ },[data?.sentences,run]);
  const word=words[index];const sentence=examples[index];
  const total=kind==='matching'?words.length:examples.length;const complete=total>0&&index>=total;
  const blocks=useMemo(()=>sentence?.words.map((w,i)=>({text:slice(sentence.body,i===0?0:w.start,sentence.words[i+1]?.start),audio:{occurrenceId:w.occurrenceId}}))??[],[sentence]);
  const shuffled=useMemo(()=>shuffle(blocks.map((block,i)=>({...block,i}))),[blocks,index]);
  const options=useMemo(()=>{
   if(!word)return [];
-  const seen=new Set([word.meaning]);const candidates=shuffle(words).filter(w=>{if(seen.has(w.meaning))return false;seen.add(w.meaning);return true});
+  const seen=new Set([word.meaning]);const candidates=shuffle(wordPool).filter(w=>{if(seen.has(w.meaning))return false;seen.add(w.meaning);return true});
   return shuffle([word,...candidates.slice(0,3)]);
- },[word,words,index]);
+ },[word,wordPool,index]);
  const [hint,setHint]=useState('');const [prepared,setPrepared]=useState('');const [preparation,setPreparation]=useState({seconds:0});const [loadError,setLoadError]=useState('');const [retry,setRetry]=useState(0);
  const challenge=session+':'+textId+':'+area+':'+all+':'+kind+':'+index+':'+(kind==='sentence'?sentence?.occurrenceId:word?.baseId);const active=useRef(challenge);active.current=challenge;const event=useRef('');
  const stopRef=useRef(stopSpeech);stopRef.current=stopSpeech;

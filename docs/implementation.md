@@ -92,7 +92,9 @@ reconstruction displays its tokens and controls immediately, with a placeholder
 while its English translation generates. Audio is lazy on click, and token
 placement never waits for it. Token pronunciations queue
 in click order and stop when advancing. Placed tokens can be reordered by drag.
-Each finite run shows the question number and total, then offers Practice again.
+Each run randomly selects at most five word questions and five sentence questions.
+It shows the question number and capped total, then offers Practice again to draw
+a fresh random sample. Smaller lessons use only their available questions.
 Incorrect sentence answers offer an optional Show correct sentence disclosure;
 the correct sentence stays hidden until explicitly opened. No global Practice menu.
 
