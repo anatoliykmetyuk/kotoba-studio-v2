@@ -152,7 +152,13 @@ function App(){
 }
 function Library({texts,loading,completed,open,importText}:{texts:TextItem[];loading:boolean;completed:number;open:(id:string)=>void;importText:()=>void}){
  const [q,setQ]=useState('');const [filter,setFilter]=useState('all');const [folder,setFolder]=useState('');
+ const client=useQueryClient();const completedImports=useRef(new Set<string>());
  const {data:jobs=[]}=useQuery({queryKey:['jobs'],queryFn:()=>api<Job[]>('/jobs'),refetchInterval:1000});
+ useEffect(()=>{
+  const ready=new Set(jobs.filter(j=>j.kind==='import'&&j.state==='ready').map(j=>j.id));
+  const newlyCompleted=[...ready].some(id=>!completedImports.current.has(id));completedImports.current=ready;
+  if(newlyCompleted)for(const key of ['library','statistics','text','word','explore','practice','activity'])void client.invalidateQueries({queryKey:[key]});
+ },[jobs,client]);
  const {data:statistics}=useData<{meanings:number;sentences:number}>(['statistics'],'/statistics');
  const active=texts.filter(t=>filter==='archived'?t.archived:!t.archived).filter(t=>(filter==='all'||filter==='archived'||t.textState===filter)&&(!folder||t.folders?.some(f=>f.name===folder))&&(t.title+' '+t.body).includes(q));
 
@@ -169,9 +175,44 @@ function JobProgress({job}:{job:Job}){
 }
 function ImportDialog({previous,onClose,onImported,folders}:{previous:TextItem|null;onClose:()=>void;onImported:(id:string)=>void;folders:string[]}){
  const [title,setTitle]=useState(previous?.title??'');const [body,setBody]=useState(previous?.body??'');const [folder,setFolder]=useState(previous?.folders?.[0]?.name??'');const [source,setSource]=useState(previous?.sources?.find(s=>/^https?:/.test(s.url))?.url??'');const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [jobId,setJobId]=useState('');
- const {data:job}=useQuery({queryKey:['job',jobId],queryFn:()=>api<Job>('/jobs/'+jobId),enabled:!!jobId,refetchInterval:1000});
- async function submit(e:React.FormEvent){e.preventDefault();setError('');setBusy(true);try{if(previous&&body===previous.body){await api('/texts/'+previous.id,{title,revision:previous.revision},'PATCH')}const r=await api<{textId?:string;jobId?:string}>('/imports',{title,body,folder,sourceUrl:source,...(previous?{previousId:previous.id}:{})});if(r.textId)onImported(r.textId);else{setJobId(r.jobId!);const done=await waitJob(r.jobId!);onImported(done.textId)}}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
- return <Modal title={previous?'Edit text':'Import text'} onClose={onClose} wide><form onSubmit={submit} className="import-form"><label>Title<input autoFocus required maxLength={200} placeholder="Text title" value={title} onChange={e=>setTitle(e.target.value)} disabled={busy}/></label><label>Japanese text<textarea required lang="ja" placeholder="ここに日本語の文章を貼り付けてください。" value={body} onChange={e=>setBody(e.target.value)} maxLength={50000} disabled={busy}/></label><div className="import-meta"><label className="file-button"><Download size={15}/> Load a text file<input type="file" accept=".txt,.md,text/plain" disabled={busy} onChange={async e=>{const f=e.target.files?.[0];if(f){setBody(await f.text());if(!title)setTitle(f.name.replace(/\.[^.]+$/,''))}}}/></label><span>{body.length.toLocaleString()} / 50,000</span></div><div className="form-columns"><label>Folder<input value={folder} onChange={e=>setFolder(e.target.value)} list="folder-options" placeholder="Optional"/><datalist id="folder-options">{folders.map(f=><option key={f} value={f}/>)}</datalist></label><label>Source link <span className="muted">optional</span><input type="url" value={source} onChange={e=>setSource(e.target.value)} placeholder="https://…"/></label></div>{error&&<p role="alert" className="error">{error}</p>}<div className="dialog-footer"><span className="muted">{busy?'Import continues if you close this window.':''}</span><button className="primary" disabled={busy||!body.trim()||!title.trim()}>{busy?<RefreshCw size={16} className="spin"/>:<ArrowUpRight size={17}/>} {busy?'Importing…':previous?'Save revision':'Import & read'}</button></div>{job&&<JobProgress job={job}/>}</form></Modal>
+ const client=useQueryClient();const mounted=useRef(true);const pending=useRef(false);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;pending.current=false}},[]);
+ const {data:job,error:jobError}=useQuery({queryKey:['job',jobId],queryFn:({signal})=>api<Job>('/jobs/'+jobId,undefined,undefined,{signal}),enabled:!!jobId&&busy,refetchInterval:query=>['ready','failed'].includes(query.state.data?.state??'')?false:1000});
+ function finish(id:string){
+  if(!mounted.current||!pending.current)return;
+  pending.current=false;setBusy(false);setJobId('');
+  for(const key of ['library','statistics','text','word','explore','practice','activity','jobs'])void client.invalidateQueries({queryKey:[key]});
+  onImported(id);
+ }
+ useEffect(()=>{
+  if(!mounted.current||!pending.current||!job)return;
+  if(job.state==='ready')finish(job.result.textId);
+  else if(job.state==='failed'){pending.current=false;setBusy(false);setError(job.error||'Analysis failed. Retry the import or retry from the library.')}
+ },[job,onImported,client]);
+ function close(){
+  mounted.current=false;pending.current=false;
+  // Stop only this dialog's observation. The accepted server job keeps running.
+  if(jobId)void client.cancelQueries({queryKey:['job',jobId],exact:true});
+  onClose();
+ }
+ async function submit(e:React.FormEvent){
+  e.preventDefault();if(pending.current||!mounted.current)return;
+  pending.current=true;setError('');setJobId('');setBusy(true);
+  try{
+   if(previous&&body===previous.body)await api('/texts/'+previous.id,{title,revision:previous.revision},'PATCH');
+   if(!mounted.current)return;
+   const r=await api<{textId?:string;jobId?:string}>('/imports',{title,body,folder,sourceUrl:source,...(previous?{previousId:previous.id}:{})});
+   if(!mounted.current)return;
+   if(r.textId)finish(r.textId);
+   else if(r.jobId){
+    // A failed import retry can reuse its job ID; discard its terminal snapshot.
+    await client.resetQueries({queryKey:['job',r.jobId],exact:true});
+    if(mounted.current)setJobId(r.jobId);
+   }else throw new Error('Import did not return a text or job. Please retry.');
+  }catch(e){if(mounted.current){pending.current=false;setError((e as Error).message);setBusy(false)}}
+ }
+ const displayedError=error||(jobError as Error|null)?.message;
+ return <Modal title={previous?'Edit text':'Import text'} onClose={close} wide><form onSubmit={submit} className="import-form"><label>Title<input autoFocus required maxLength={200} placeholder="Text title" value={title} onChange={e=>setTitle(e.target.value)} disabled={busy}/></label><label>Japanese text<textarea required lang="ja" placeholder="ここに日本語の文章を貼り付けてください。" value={body} onChange={e=>setBody(e.target.value)} maxLength={50000} disabled={busy}/></label><div className="import-meta"><label className="file-button"><Download size={15}/> Load a text file<input type="file" accept=".txt,.md,text/plain" disabled={busy} onChange={async e=>{const f=e.target.files?.[0];if(f){const text=await f.text();if(mounted.current){setBody(text);if(!title)setTitle(f.name.replace(/\.[^.]+$/,''))}}}}/></label><span>{body.length.toLocaleString()} / 50,000</span></div><div className="form-columns"><label>Folder<input value={folder} onChange={e=>setFolder(e.target.value)} list="folder-options" placeholder="Optional"/><datalist id="folder-options">{folders.map(f=><option key={f} value={f}/>)}</datalist></label><label>Source link <span className="muted">optional</span><input type="url" value={source} onChange={e=>setSource(e.target.value)} placeholder="https://…"/></label></div>{displayedError&&<p role="alert" className="error">{displayedError}</p>}<div className="dialog-footer"><span className="muted">{busy?'Import continues if you close this window.':''}</span><button className="primary" disabled={busy||!body.trim()||!title.trim()}>{busy?<RefreshCw size={16} className="spin"/>:<ArrowUpRight size={17}/>} {busy?'Importing…':previous?'Save revision':'Import & read'}</button></div>{job&&<JobProgress job={job}/>}</form></Modal>
 }
 function Reader({destination,text,settings,openOptions,selected,range,selectTokens,pick,speak,speechBusy,close,practice,complete,markRemaining,progress,edit,archive}:{destination:{occurrenceId:string;key:number}|null;text:TextItem;settings:Settings;openOptions:()=>void;selected:Token|null;range:PhraseRange|null;selectTokens:(anchor:string,end:string,finished:boolean)=>void;pick:(t:Token,s:Sentence)=>void;speak:(p:{text:string})=>void;speechBusy:boolean;close:()=>void;practice:()=>void;complete:()=>void;markRemaining:()=>void;progress:(c:number)=>void;edit:()=>void;archive:()=>void}){
  const [menu,setMenu]=useState(false);const root=useRef<HTMLElement>(null);const book=useRef<HTMLDivElement>(null);useTokenSelection(book,text.id,selectTokens);const progressState=useReadingProgress(text.id,text.cursor,root);
