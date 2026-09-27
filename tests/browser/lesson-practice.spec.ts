@@ -226,6 +226,21 @@ test('sentence controls stay usable while translation and speech jobs are pendin
  }finally{resume()}
 });
 
+test('incorrect sentence offers a correct-answer hint only when explicitly opened',async({page,request},info)=>{
+ const text=await importLesson(request,'Optional sentence hint acceptance','猫は魚を見ます。');
+ await enterPractice(page,text);await page.getByRole('button',{name:'Build a sentence',exact:true}).click();
+ await expect(page.locator('.pieces button').first()).toBeVisible();
+ const count=await page.locator('.pieces button').count();
+ for(let i=count-1;i>=0;i--)await page.locator(`.pieces [data-piece="${i}"]`).tap();
+ await page.getByRole('button',{name:'Check sentence',exact:true}).click();await expect(page.locator('.practice-feedback')).toContainText('Incorrect');
+ const hint=page.getByRole('button',{name:'Show correct sentence',exact:true});await expect(hint).toBeVisible();await expect(hint).toHaveAttribute('aria-expanded','false');
+ await expect(page.locator('#practice-correct-sentence')).toHaveCount(0);
+ await hint.click();await expect(page.locator('#practice-correct-sentence')).toHaveText(text.sentences[0].body);
+ await page.screenshot({path:info.outputPath('optional-sentence-hint.png')});
+ await page.getByRole('button',{name:'Hide correct sentence',exact:true}).click();await expect(page.locator('#practice-correct-sentence')).toHaveCount(0);
+ await page.locator('.sentence-answer button').first().click();await expect(hint).toHaveCount(0);
+});
+
 test('resetting a sentence ignores an answer response from the previous attempt',async({page,request,browserName})=>{
  test.skip(browserName!=='chromium','Uses Chromium transport latency, not mocked responses.');
  const text=await importLesson(request,'Reset grading acceptance','猫は魚を見ます。');
