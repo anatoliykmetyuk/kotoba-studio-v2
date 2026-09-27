@@ -7,7 +7,7 @@ import './style.css';
 import {useReadingProgress,useProgressSync} from './reading-progress';
 import {useSpeech} from './speech';
 import {Practice} from './practice';
-import {PwaStatus} from './pwa';
+import {PwaStatus,AppUpdates,usePwaUpdates} from './pwa';
 import {useUnifiedActivation} from './pen-activation';
 import {useSwipeDismiss,useTokenSelection} from './touch';
 import {phraseRange,selectionTokens,type PhraseRange} from './selection';
@@ -30,7 +30,7 @@ function Modal({title,children,onClose,wide=false}:{title:string;children:React.
  return <dialog aria-label={title} ref={ref} style={{transform:drag?`translateY(${drag}px)`:undefined}} className={wide?'wide':''} onCancel={onClose} onPointerDownCapture={e=>{backdropPress.current=e.target===ref.current&&outside(e.clientX,e.clientY)}} onClick={e=>{if(backdropPress.current&&e.target===ref.current&&(e.detail===0||outside(e.clientX,e.clientY)))onClose();backdropPress.current=false}}><div className="popup-drag-area" aria-hidden="true"><div className="sheet-handle"/></div><div className="dialog-head"><h2>{title}</h2><IconButton label="Close" onClick={onClose}><X size={20}/></IconButton></div>{children}</dialog>
 }
 function App(){
- useProgressSync();useUnifiedActivation();
+ useProgressSync();useUnifiedActivation();const updates=usePwaUpdates();
  const client=useQueryClient();const [view,setView]=useState<'library'|'read'|'explore'|'practice'>('library');
  const [textId,setTextId]=useState<string|null>(null);const [selected,setSelected]=useState<Token|null>(null);const [importOpen,setImportOpen]=useState(false);const [editing,setEditing]=useState<TextItem|null>(null);const [settingsOpen,setSettingsOpen]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');
  const [settingsDraft,setSettingsDraft]=useState<Partial<Settings>>({});const settingsDraftRef=useRef<Partial<Settings>>({});const settingsQueue=useRef<Promise<void>>(Promise.resolve());const settingsVersion=useRef(0);const settingsFieldVersions=useRef<Partial<Record<keyof Settings,number>>>({});
@@ -134,7 +134,7 @@ function App(){
  const completed=library.filter(t=>!t.archived&&t.textState==='completed').length;
  return <div className={"app-shell "+(view==='read'?'is-reading':'')}>
   <audio ref={audioRef} preload="none" aria-hidden="true"/><aside className="rail"><a className="brand" href="#" onClick={e=>{e.preventDefault();navigate('library')}}><span className="brand-mark">言</span><span>Kotoba<span className="brand-sub">STUDIO</span></span></a><nav aria-label="Main navigation">{([['library',BookOpen,'Library'],['explore',Search,'Explore']] as const).map(([v,Icon,label])=><button key={v} aria-label={label} title={label} className={view===v||(v==='library'&&(view==='read'||view==='practice'))?'nav-active':''} onClick={()=>navigate(v)}><Icon size={19}/><span>{label}</span></button>)}</nav><div className="rail-bottom"><span className={'local-dot '+(!health?.workerReady?'quiet':'')}/><span>{health?.workerReady?'Language tools ready':'Language tools unavailable'}</span><button onClick={()=>setSettingsOpen(true)}><Settings2 size={17}/> Settings</button></div></aside>
-  <main className="main"><PwaStatus/><header className="topbar"><span className="breadcrumb">{view==='read'?'Reading':view[0].toUpperCase()+view.slice(1)}</span><div className="top-actions"><IconButton label="Settings" onClick={()=>setSettingsOpen(true)}><Settings2 size={19}/></IconButton><button className="primary compact" onClick={()=>{setEditing(null);setImportOpen(true)}}><Plus size={17}/><span>Import text</span></button></div></header>
+  <main className="main"><PwaStatus updates={updates}/><header className="topbar"><span className="breadcrumb">{view==='read'?'Reading':view[0].toUpperCase()+view.slice(1)}</span><div className="top-actions"><IconButton label="Settings" onClick={()=>setSettingsOpen(true)}><Settings2 size={19}/></IconButton><button className="primary compact" onClick={()=>{setEditing(null);setImportOpen(true)}}><Plus size={17}/><span>Import text</span></button></div></header>
   {(error||libraryError||textError)&&<div className="error" role="alert"><span>{error||(libraryError as Error)?.message||(textError as Error)?.message}</span><button onClick={()=>{setError('');flushSettings();refresh()}}>Retry</button><IconButton label="Dismiss error" onClick={()=>setError('')}><X size={16}/></IconButton></div>}
   {notice&&<div className="toast" role="status"><Check size={17}/>{notice}</div>}
   {view==='library'&&<Library texts={library} loading={libraryLoading} completed={completed} open={openText} importText={()=>{setEditing(null);setImportOpen(true)}}/>}
@@ -145,7 +145,7 @@ function App(){
   <nav className="mobile-nav" aria-label="Mobile navigation"><button className={view==='library'||view==='read'||view==='practice'?'active':''} onClick={()=>navigate('library')}><BookOpen size={20}/>Library</button><button className={view==='explore'?'active':''} onClick={()=>navigate('explore')}><Search size={20}/>Explore</button></nav>
   {importOpen&&<ImportDialog previous={editing} onClose={()=>setImportOpen(false)} onImported={id=>{setImportOpen(false);refresh();openText(id)}} folders={[...new Set(library.flatMap(t=>(t.folders??[]).map(f=>f.name)))]}/>}
   {completionText&&<CompletionDialog text={completionText} close={()=>setCompletionText(null)} done={()=>{setCompletionText(null);refresh();setNotice('Lesson completed')}}/>}
-  {settingsOpen&&<Modal title="Settings" onClose={()=>setSettingsOpen(false)}><ReaderSettings settings={settings} change={saveSettings}/></Modal>}
+  {settingsOpen&&<Modal title="Settings" onClose={()=>setSettingsOpen(false)}><ReaderSettings settings={settings} change={saveSettings}/><AppUpdates updates={updates}/></Modal>}
   {range&&phraseReady&&range.tokens.length>1&&<PhraseDialog range={range} speechBusy={busy} speechError={error} speak={()=>speak({text:range.phrase,transient:true})} close={()=>{stopSpeech();setError('');setRange(null);setPhraseReady(false)}}/>}
  </div>
 }

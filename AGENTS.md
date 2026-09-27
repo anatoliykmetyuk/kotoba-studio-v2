@@ -28,6 +28,8 @@ Listening precedes Reading in status controls and area filters. Popup dismissal 
 
 Serve the installable PWA using Tailscale-managed trusted HTTPS, never a self-signed certificate or a certificate-warning bypass. Use custom HTTPS port 3010, never default port 443. Keep upstream HTTP bound only to loopback; do not bind Docker HTTP to the Tailscale address on the HTTPS port. Verify mobile and standalone layouts, service-worker updates, offline cached reading, and queued progress recovery. Never claim WebKit offline emulation passed when it is blocked by the documented Playwright service-worker issue.
 
+Settings must provide Check for updates with explicit checking, current and failure results. Show a separate Reload to update action only when an update is ready; never reload automatically while the user is reading. Share update state with the existing banner and keep failed checks retryable.
+
 English/Latin runs are plain noninteractive reader text, never standalone vocabulary entities; preserve them in multi-token phrase selections. Reader settings need 44px slider targets, stable values while holding/releasing, and serialized persistence that cannot roll back newer local edits.
 
 Sticky reader controls must remain below the top device safe area after scrolling; reserve side cutouts after rotation and keep popup controls in the safe viewport. Verify nonzero safe-area insets, because browser device presets alone report zero.

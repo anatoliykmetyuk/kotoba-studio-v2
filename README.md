@@ -62,7 +62,7 @@ Enable MagicDNS and HTTPS certificates in your Tailscale network, then configure
 tailscale serve --bg --https=3010 http://127.0.0.1:3010
 ```
 
-Open the HTTPS URL printed by Tailscale on your phone while connected to the same tailnet. On iPhone, use Safari's **Share > Add to Home Screen**; on Android, use the browser's install action. The app has a web manifest, icons, a service worker, cached reading, queued reading-progress recovery, and a Reload control when an update is available. New imports, uncached translations, and uncached pronunciation require the Mac to be running.
+Open the HTTPS URL printed by Tailscale on your phone while connected to the same tailnet. On iPhone, use Safari's **Share > Add to Home Screen**; on Android, use the browser's install action. The app has a web manifest, icons, a service worker, cached reading, queued reading-progress recovery, and manual update controls. In **Settings > App updates**, select **Check for updates**. The result shows **Up to date**, an error you can retry, or **Update available** with a separate **Reload to update** button. Checking never reloads the app automatically. New imports, uncached translations, and uncached pronunciation require the Mac to be running.
 
 Use the Tailscale hostname with its trusted certificate. No self-signed certificate or certificate-warning bypass is needed. The app uses custom HTTPS port 3010 and binds upstream HTTP to loopback; it does not occupy HTTPS port 443. This is a single-user application with powerful graph-mutation APIs for trusted agents. Keep it on localhost or a tailnet restricted to authorized devices, not the public internet.
 

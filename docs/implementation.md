@@ -91,6 +91,10 @@ alternatives every challenge. Correct feedback advances automatically. Sentence
 reconstruction prepares its English prompt and all token audio before display,
 and each token click plays prepared pronunciation. No global Practice menu.
 
+Settings exposes manual app-update checks with explicit results and a separate
+Reload to update action for a ready update. The banner shares this state. Checks
+and updates preserve the open session until the user chooses to reload.
+
 ## Agents and operations
 
 `AGENTS.md`, `.agents/skills/kotoba-graph/SKILL.md`, OpenAPI, the JSON CLI and OML
