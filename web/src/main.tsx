@@ -8,6 +8,7 @@ import {useReadingProgress,useProgressSync} from './reading-progress';
 import {useSpeech} from './speech';
 import {Practice} from './practice';
 import {PwaStatus} from './pwa';
+import {useUnifiedActivation} from './pen-activation';
 import {useSwipeDismiss,useTokenSelection} from './touch';
 import {phraseRange,selectionTokens,type PhraseRange} from './selection';
 import {ReaderSettings} from './reader-settings';
@@ -26,10 +27,10 @@ function Modal({title,children,onClose,wide=false}:{title:string;children:React.
  function outside(x:number,y:number){const r=ref.current?.getBoundingClientRect();return !!r&&(x<r.left||x>r.right||y<r.top||y>r.bottom)}
  // A mouse drag across child sections can synthesize a click on their common
  // dialog ancestor. Only a press and release outside the box is a backdrop tap.
- return <dialog aria-label={title} ref={ref} style={{transform:drag?`translateY(${drag}px)`:undefined}} className={wide?'wide':''} onCancel={onClose} onPointerDownCapture={e=>{backdropPress.current=e.target===ref.current&&outside(e.clientX,e.clientY)}} onClick={e=>{if(backdropPress.current&&e.target===ref.current&&outside(e.clientX,e.clientY))onClose();backdropPress.current=false}}><div className="popup-drag-area" aria-hidden="true"><div className="sheet-handle"/></div><div className="dialog-head"><h2>{title}</h2><IconButton label="Close" onClick={onClose}><X size={20}/></IconButton></div>{children}</dialog>
+ return <dialog aria-label={title} ref={ref} style={{transform:drag?`translateY(${drag}px)`:undefined}} className={wide?'wide':''} onCancel={onClose} onPointerDownCapture={e=>{backdropPress.current=e.target===ref.current&&outside(e.clientX,e.clientY)}} onClick={e=>{if(backdropPress.current&&e.target===ref.current&&(e.detail===0||outside(e.clientX,e.clientY)))onClose();backdropPress.current=false}}><div className="popup-drag-area" aria-hidden="true"><div className="sheet-handle"/></div><div className="dialog-head"><h2>{title}</h2><IconButton label="Close" onClick={onClose}><X size={20}/></IconButton></div>{children}</dialog>
 }
 function App(){
- useProgressSync();
+ useProgressSync();useUnifiedActivation();
  const client=useQueryClient();const [view,setView]=useState<'library'|'read'|'explore'|'practice'>('library');
  const [textId,setTextId]=useState<string|null>(null);const [selected,setSelected]=useState<Token|null>(null);const [importOpen,setImportOpen]=useState(false);const [editing,setEditing]=useState<TextItem|null>(null);const [settingsOpen,setSettingsOpen]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');
  const [settingsDraft,setSettingsDraft]=useState<Partial<Settings>>({});const settingsDraftRef=useRef<Partial<Settings>>({});const settingsQueue=useRef<Promise<void>>(Promise.resolve());const settingsVersion=useRef(0);const settingsFieldVersions=useRef<Partial<Record<keyof Settings,number>>>({});

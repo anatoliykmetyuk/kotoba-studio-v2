@@ -4,7 +4,6 @@ import {RefreshCw,Volume2,X} from 'lucide-react';
 import {useSwipeDismiss} from './touch';
 import {usePopupScrollLock} from './popup-scroll-lock';
 import {CopyButton} from './copy-button';
-import {usePenButtonActivation} from './pen-activation';
 
 /** The same overlay, heading and playback control for a word or selected phrase. */
 export function ReadingDetails({label,closeLabel,text,reading,textClass,copyLabel,pronounceLabel,speak,busy,close,children}:{
@@ -12,7 +11,6 @@ export function ReadingDetails({label,closeLabel,text,reading,textClass,copyLabe
  pronounceLabel:string;speak:()=>Promise<void>;busy:boolean;close:()=>void;children:ReactNode;
 }){
  const ref=useRef<HTMLElement>(null);const drag=useSwipeDismiss(ref,close);usePopupScrollLock(ref);
- const backdrop=useRef<HTMLButtonElement>(null);usePenButtonActivation(ref);usePenButtonActivation(backdrop);
  const backdropPress=useRef<{id:number;x:number;y:number;moved:boolean}|null>(null);
  useEffect(()=>{
   const previous=document.activeElement as HTMLElement|null;
@@ -31,7 +29,7 @@ export function ReadingDetails({label,closeLabel,text,reading,textClass,copyLabe
   }
   addEventListener('keydown',key);return()=>removeEventListener('keydown',key);
  },[close]);
- return createPortal(<><button ref={backdrop} type="button" className="sheet-backdrop" aria-label="Dismiss popup" tabIndex={-1}
+ return createPortal(<><button type="button" className="sheet-backdrop" aria-label="Dismiss popup" tabIndex={-1}
   onPointerDown={event=>{backdropPress.current=event.button===0?{id:event.pointerId,x:event.clientX,y:event.clientY,moved:false}:null}}
   onPointerMove={event=>{const press=backdropPress.current;if(press?.id===event.pointerId&&Math.hypot(event.clientX-press.x,event.clientY-press.y)>10)press.moved=true}}
   onPointerCancel={()=>{backdropPress.current=null}}
