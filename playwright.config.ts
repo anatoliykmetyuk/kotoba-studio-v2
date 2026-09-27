@@ -6,5 +6,5 @@ export default defineConfig({testDir:'tests/browser',timeout:120_000,expect:{tim
  {name:'phone-webkit-landscape',use:{...devices['iPhone 13 landscape'],browserName:'webkit'}},
  {name:'ipad-webkit-portrait',use:{...devices['iPad (gen 7)'],browserName:'webkit'}},
  {name:'ipad-webkit-landscape',use:{...devices['iPad (gen 7) landscape'],browserName:'webkit'}},
- {name:'desktop-chromium',testMatch:['word-overlay.spec.ts','selection-modes.spec.ts','pwa-update.spec.ts','unified-input.spec.ts'],use:{browserName:'chromium',viewport:{width:1440,height:900}}},
- {name:'desktop-webkit',testMatch:['word-overlay.spec.ts','selection-modes.spec.ts','pwa-update.spec.ts','unified-input.spec.ts'],use:{browserName:'webkit',viewport:{width:1440,height:900}}}]});
+ {name:'desktop-chromium',testMatch:['word-overlay.spec.ts','selection-modes.spec.ts','pwa-update.spec.ts','unified-input.spec.ts','sentence-reorder.spec.ts'],use:{browserName:'chromium',viewport:{width:1440,height:900}}},
+ {name:'desktop-webkit',testMatch:['word-overlay.spec.ts','selection-modes.spec.ts','pwa-update.spec.ts','unified-input.spec.ts','sentence-reorder.spec.ts'],use:{browserName:'webkit',viewport:{width:1440,height:900}}}]});

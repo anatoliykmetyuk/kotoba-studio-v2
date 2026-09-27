@@ -1,0 +1,7 @@
+.sentence-answer.sentence-assembly{align-content:center}
+.sentence-assembly-token{position:relative;max-width:100%;overflow-wrap:anywhere;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:grab}
+.sentence-assembly-token[data-dragging=true]{opacity:.3}
+.sentence-assembly-token:disabled{cursor:default}
+.sentence-assembly-overlay{display:flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;padding:8px;border-radius:5px;background:var(--soft);color:var(--ink);font:22px serif;box-shadow:var(--shadow);cursor:grabbing;pointer-events:none;overflow-wrap:anywhere}
+.sentence-assembly-instructions{margin:-8px 0 18px;color:var(--muted);font-size:12px;line-height:1.5}
+@media(prefers-reduced-motion:reduce){.sentence-assembly-token{transition:none!important}}
