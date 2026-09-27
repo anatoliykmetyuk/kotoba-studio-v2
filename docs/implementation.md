@@ -61,12 +61,16 @@ text are unhighlighted. Latin text has no ordinary click action.
 Word and phrase popups share one responsive overlay component. Desktop overlays
 must preserve reader geometry. Mobile dismissal accepts a downward touch gesture
 only when it starts at the scroll top; otherwise the complete gesture scrolls.
-Mouse dragging never dismisses a popup. Lock background scrolling, retain keyboard
-focus and preserve safe areas. Settings sliders have 44px targets and stable
+Mouse dragging never dismisses a popup. Close controls accept mouse, touch, pen
+and keyboard input; a completed touch gesture must not block a subsequent pen tap.
+Clicking or tapping the backdrop dismisses the overlay without activating lesson
+content behind it. Lock background scrolling, retain keyboard focus and preserve
+safe areas. Settings sliders have 44px targets and stable
 hold/release behavior; serialized saves preserve newer edits and allow retry.
 
-Mouse drag or mobile long-press drag selects a phrase without a toolbar mode or
-native OS text selection. Phrase output is read-only, with automatic translation,
+Mouse drag or finger/Pencil long-press drag selects a phrase. Holding a single
+token and releasing also keeps its anchor selected for a later endpoint tap.
+Support both gestures without a toolbar mode button or native OS text selection. Phrase output is read-only, with automatic translation,
 autoplay and the ordinary speaker icon. No Save or Translate again control.
 Icon-only copy actions copy the source word/phrase and the word's contextual
 sentence. Example navigation highlights its destination briefly, then fades.

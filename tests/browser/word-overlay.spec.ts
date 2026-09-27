@@ -1,4 +1,98 @@
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Page,type Locator} from '@playwright/test';
+
+import {muteTestOutput} from './audio-output';
+
+test.beforeEach(async({page})=>muteTestOutput(page));
+
+// Chromium supplies trusted pen events. WebKit has no remote pen API, so its
+// test exercises a pointer-only tap without claiming hardware QA. No synthetic
+// click is supplied: Safari Pencil input may omit that compatibility event.
+async function penTap(page:Page,target:Locator,browserName:string,point?:{x:number;y:number}){
+ await target.scrollIntoViewIfNeeded();
+ const box=(await target.boundingBox())!,{x,y}=point??{x:box.x+box.width/2,y:box.y+box.height/2};
+ if(browserName==='chromium'){
+  const session=await page.context().newCDPSession(page);
+  try{
+   await session.send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',buttons:1,clickCount:1,pointerType:'pen'});
+   await session.send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',buttons:0,clickCount:1,pointerType:'pen'});
+  }finally{await session.detach()}
+ }else await target.evaluate((el,{x,y})=>{
+  for(const type of ['pointerdown','pointerup'])el.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,pointerId:7,pointerType:'pen',isPrimary:true,clientX:x,clientY:y,button:0,buttons:type==='pointerdown'?1:0}));
+ },{x,y});
+}
+
+test('popup close accepts pen after touch scrolling and outside dismissal uses mouse or touch',async({page,request,context,browserName,isMobile},info)=>{
+ if(browserName==='chromium')await context.grantPermissions(['clipboard-write']);
+ await page.addInitScript(()=>{
+  (window as any).penPlaybackCount=0;
+  document.addEventListener('play',event=>{if(event.target instanceof HTMLMediaElement){event.target.muted=true;(window as any).penPlaybackCount++}},true);
+ });
+ const response=await request.post('/api/v1/imports',{data:{title:'Popup input acceptance',body:'猫は窓のそばで眠っています。私は温かいお茶を飲みました。\n\n'.repeat(35),folder:'Acceptance'}});
+ expect(response.ok()).toBe(true);const imported=await response.json();let id=imported.textId;
+ if(!id)await expect.poll(async()=>{const job=await(await request.get('/api/v1/jobs/'+imported.jobId)).json();if(job.state==='failed')throw new Error(job.error);id=job.result.textId;return job.state},{timeout:90_000}).toBe('ready');
+ await page.goto('/#'+id);const token=page.locator('.token').first();await expect(token).toBeVisible();
+ const panel=page.getByRole('dialog',{name:'Word details',exact:true});
+ await token.click();await expect(panel).toBeVisible();
+ // A short touch pull prevents a synthetic click but does not dismiss. The
+ // subsequent independent Pencil or mouse tap must not inherit that suppression.
+ await panel.evaluate(el=>{
+  const r=el.getBoundingClientRect(),target=el.querySelector('.word-panel-head')!;
+  for(const [type,dy] of [['touchstart',0],['touchmove',25],['touchend',25]] as const){
+   const point={identifier:1,clientX:r.left+20,clientY:r.top+60+dy};
+   const event=new Event(type,{bubbles:true,cancelable:true});Object.assign(event,{touches:type==='touchend'?[]:[point],changedTouches:[point]});target.dispatchEvent(event);
+  }
+ });
+ await expect(panel).toBeVisible();
+ await penTap(page,panel.getByRole('button',{name:'Close word details',exact:true}),browserName);
+ await expect(panel).toHaveCount(0);
+ await token.click();await expect(panel).toBeVisible();
+ await expect(panel.getByRole('button',{name:'Pronounce word',exact:true})).toBeEnabled();
+ await expect.poll(()=>page.locator('audio').evaluate((audio:HTMLAudioElement)=>audio.ended)).toBe(true);
+ const playbackCount=await page.evaluate(()=>(window as any).penPlaybackCount);
+ await penTap(page,panel.getByRole('button',{name:'Pronounce word',exact:true}),browserName);
+ await expect.poll(()=>page.evaluate(()=>(window as any).penPlaybackCount)).toBe(playbackCount+1);
+ if(browserName==='chromium'){
+  // These clipboard writes use real pen input and real browser permissions.
+  for(const label of ['Copy word','Copy sentence']){
+   const copy=panel.getByRole('button',{name:label,exact:true});await copy.scrollIntoViewIfNeeded();
+   await penTap(page,copy,browserName);await expect(copy).toHaveAttribute('title','Copied');
+  }
+ }else{
+  // DOM pen events cannot grant WebKit clipboard permission; verify button
+  // activation separately from the trusted clipboard checks in the next test.
+  const more=panel.getByRole('button',{name:/Show all meanings/});await penTap(page,more,browserName);await expect(more).toHaveCount(0);
+ }
+ const backdrop=page.getByRole('button',{name:'Dismiss popup',exact:true});
+ await expect(backdrop).toBeVisible();
+ const panelBox=(await panel.boundingBox())!;
+ const point=panelBox.x>10?{x:panelBox.x/2,y:Math.max(panelBox.y+80,100)}:{x:10,y:panelBox.y/2};
+ // Both press and release must be outside; dragging out of content must not close.
+ await page.mouse.move(panelBox.x+20,panelBox.y+60);await page.mouse.down();await page.mouse.move(point.x,point.y,{steps:5});await page.mouse.up();
+ await expect(panel).toBeVisible();
+ await page.screenshot({path:info.outputPath('popup-dismissal.png')});
+ if(isMobile)await page.touchscreen.tap(point.x,point.y);else await page.mouse.click(point.x,point.y);
+ await expect(panel).toHaveCount(0);await expect(page.locator('body')).not.toHaveCSS('position','fixed');
+ // Clicking the backdrop must not also select a lesson word behind it.
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await token.click();await expect(panel).toBeVisible();
+ await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x+20,point.y+30,{steps:5});await page.mouse.move(point.x,point.y,{steps:5});await page.mouse.up();
+ await expect(panel).toBeVisible();
+ await penTap(page,backdrop,browserName,point);await expect(panel).toHaveCount(0);
+ // Check the entire gutter, including immediately beside the visible edge,
+ // rather than only the middle of the text area.
+ const viewport=page.viewportSize()!;
+ const points=panelBox.x>10?[1,30,100].flatMap(gap=>[5,viewport.height/2,viewport.height-5].map(y=>({x:panelBox.x-gap,y}))):[2,viewport.width/2,viewport.width-2].map(x=>({x,y:Math.max(1,panelBox.y-2)}));
+ for(const outside of points){
+  await token.click();await expect(panel).toBeVisible();
+  expect(await backdrop.evaluate((el,p)=>document.elementFromPoint(p.x,p.y)===el,outside)).toBe(true);
+  if(isMobile)await page.touchscreen.tap(outside.x,outside.y);else await page.mouse.click(outside.x,outside.y);
+  await expect(panel).toHaveCount(0);
+  await token.click();await expect(panel).toBeVisible();await penTap(page,backdrop,browserName,outside);await expect(panel).toHaveCount(0);
+  // A compatibility click arriving after dismissal must not activate the page.
+  await page.evaluate(p=>document.elementFromPoint(p.x,p.y)?.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,detail:1,clientX:p.x,clientY:p.y})),outside);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+ }
+});
 
 async function geometry(page:Page){
  return page.evaluate(()=>['.reader','.book-body','.token'].flatMap(selector=>Array.from(document.querySelectorAll(selector)).slice(0,160).map(el=>{

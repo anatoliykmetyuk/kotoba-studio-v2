@@ -29,6 +29,31 @@ custom Tailscale HTTPS port 3010. Certificate-warning bypasses are not acceptabl
 
 ## Verified results
 
+Popup and selection correction (2026-09-28): reproduced a suppressed pen click
+after a short touch pull, then added direct pen button activation and a body-level
+overlay. All eight expanded dismissal cases passed across the matrix and focused
+landscape rerun, covering close/speech controls, clipboard writes in Chromium,
+the complete outside gutter, late compatibility clicks, and drag rejection.
+Eight existing overlay/settings cases also passed (3.0 minutes).
+
+The final selection run passed all 16 cases in 3.1 minutes over trusted Tailscale
+HTTPS: phone/iPad orientations and desktop, hold-release then endpoint tap,
+hold-drag, mouse drag, cancellation and keyboard activation. It also verifies
+that selection does not learn or pronounce individual words. A landscape failure
+exposed unrelated mouse hover canceling a touch hold; input ownership now prevents
+that. A fresh reviewer identified stale click suppression after cancellation,
+which was fixed and covered by a regression. Follow-up review found no remaining
+concrete defects. Phone, iPad and desktop screenshots were inspected.
+
+Chromium used native pen dispatch; WebKit used DOM pen events without synthetic
+clicks because Playwright has no native WebKit pen input API. This is not physical
+Apple Pencil verification. Test audio output is muted while real media still
+loads and plays. No backend, ontology or database queries changed in this patch.
+Final iPad landscape and desktop Chromium integration checks passed in 56.3
+seconds, including clipboard copying, reader geometry and reading progress.
+The deployed port-3010 build passed all six mobile PWA smoke checks in 7.9
+seconds; served HTML, service worker and assets match the container build.
+
 | Check | Result |
 | --- | --- |
 | Backend suite | 85 passed, 1 opt-in live-model test skipped in the normal run (18.34 seconds). The live dictionary/model round trip passed separately (5.17 seconds); the final progress regression passed in a focused 5-test run. |

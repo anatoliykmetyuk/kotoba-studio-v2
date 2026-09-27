@@ -1,8 +1,10 @@
 import {useEffect,useRef,type ReactNode} from 'react';
+import {createPortal} from 'react-dom';
 import {RefreshCw,Volume2,X} from 'lucide-react';
 import {useSwipeDismiss} from './touch';
 import {usePopupScrollLock} from './popup-scroll-lock';
 import {CopyButton} from './copy-button';
+import {usePenButtonActivation} from './pen-activation';
 
 /** The same overlay, heading and playback control for a word or selected phrase. */
 export function ReadingDetails({label,closeLabel,text,reading,textClass,copyLabel,pronounceLabel,speak,busy,close,children}:{
@@ -10,6 +12,8 @@ export function ReadingDetails({label,closeLabel,text,reading,textClass,copyLabe
  pronounceLabel:string;speak:()=>Promise<void>;busy:boolean;close:()=>void;children:ReactNode;
 }){
  const ref=useRef<HTMLElement>(null);const drag=useSwipeDismiss(ref,close);usePopupScrollLock(ref);
+ const backdrop=useRef<HTMLButtonElement>(null);usePenButtonActivation(ref);usePenButtonActivation(backdrop);
+ const backdropPress=useRef<{id:number;x:number;y:number;moved:boolean}|null>(null);
  useEffect(()=>{
   const previous=document.activeElement as HTMLElement|null;
   ref.current?.focus({preventScroll:true});
@@ -27,9 +31,14 @@ export function ReadingDetails({label,closeLabel,text,reading,textClass,copyLabe
   }
   addEventListener('keydown',key);return()=>removeEventListener('keydown',key);
  },[close]);
- return <><div className="sheet-backdrop" onClick={close}/><aside ref={ref} style={{transform:drag?`translateY(${drag}px)`:undefined}} tabIndex={-1} className="word-panel" role="dialog" aria-modal="true" aria-label={label}>
+ return createPortal(<><button ref={backdrop} type="button" className="sheet-backdrop" aria-label="Dismiss popup" tabIndex={-1}
+  onPointerDown={event=>{backdropPress.current=event.button===0?{id:event.pointerId,x:event.clientX,y:event.clientY,moved:false}:null}}
+  onPointerMove={event=>{const press=backdropPress.current;if(press?.id===event.pointerId&&Math.hypot(event.clientX-press.x,event.clientY-press.y)>10)press.moved=true}}
+  onPointerCancel={()=>{backdropPress.current=null}}
+  onClick={event=>{const press=backdropPress.current;backdropPress.current=null;if(event.detail===0||(press&&!press.moved))close()}}/>
+ <aside ref={ref} style={{transform:drag?`translateY(${drag}px)`:undefined}} tabIndex={-1} className="word-panel" role="dialog" aria-modal="true" aria-label={label}>
   <div className="sheet-drag-area" role="button" tabIndex={0} aria-label="Drag down to close" onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();close()}}}><div className="sheet-handle"/></div>
   <div className="word-panel-head"><button className="icon-button" aria-label={closeLabel} title={closeLabel} onClick={close}><X size={20}/></button></div>
   <div className="word-scroll"><div className="word-title"><CopyButton text={text} label={copyLabel}/><div>{reading&&<span className="word-reading" lang="ja">{reading}</span>}<h2 lang="ja" className={textClass}>{text}</h2></div><button className="icon-button" aria-label={pronounceLabel} title={pronounceLabel} onClick={()=>void speak()} disabled={busy}>{busy?<RefreshCw className="spin" size={21}/>:<Volume2 size={24}/>}</button></div>{children}</div>
- </aside></>;
+ </aside></>,document.body);
 }
