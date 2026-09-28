@@ -2094,7 +2094,9 @@
           "folder": {
             "type": "string",
             "title": "Folder",
-            "default": ""
+            "description": "Ignored. Assign folder membership separately through a graph transaction.",
+            "default": "",
+            "deprecated": true
           },
           "sourceUrl": {
             "type": "string",

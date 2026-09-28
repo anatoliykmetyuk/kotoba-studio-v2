@@ -64,8 +64,12 @@ def migrate(source:Path,output:Path,legacy_python:Path):
     if token['start']>=s['start'] and token['end']<=s['end']:
      base=ensure_base(token);s['tokens'].append(token|{'start':token['start']-s['start'],'end':token['end']-s['start'],'selected':{'baseId':base['id']}})
   # Exact v1 token segmentation and saved selectable-token position are preserved.
-  payload={'title':old['title'],'body':old['body'],'folder':folders.get(old['folder_id'],{}).get('name','')}
+  payload={'title':old['title'],'body':old['body']}
   result=finalize_import(m,payload,{'sentences':parsed});id=result['textId'];text_map[old['id']]=id;token_map[old['id']]=tokens
+  folder_name=folders.get(old['folder_id'],{}).get('name','').strip()
+  if folder_name:
+   folder=m.create('Folder','folder:'+folder_name.casefold(),name=folder_name)
+   m.link(folder['id'],'CONTAINS',id)
   count=len(tokens);position=min(max(0,old['reading_position']),count);cursor=tokens[position-1]['end'] if position else 0
   complete=count>0 and old['reading_position']>=count
   m.update(id,cursor=len(old['body']) if complete else cursor,textState='completed' if complete else 'new',createdAt=old['created_at'],updatedAt=old['updated_at'])

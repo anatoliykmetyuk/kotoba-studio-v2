@@ -872,6 +872,8 @@ export interface components {
             body: string;
             /**
              * Folder
+             * @deprecated
+             * @description Ignored. Assign folder membership separately through a graph transaction.
              * @default
              */
             folder: string;

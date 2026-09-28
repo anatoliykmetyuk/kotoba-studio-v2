@@ -35,6 +35,16 @@ Read queries are explained before execution and must be read-only. CALL, adminis
 ./kotoba request GET /jobs/JOB_ID
 ```
 
+Rename a Folder using the generic transaction below with
+`MATCH (f:Folder {name:$oldName}) SET f.name=$newName`. This retains the same node
+and memberships. Folder names must be unique. Ingestion accepts no folder
+assignment: new lessons appear unfiled in All texts. After successful import,
+the agent attaches the Text separately with
+`MATCH (f:Folder {name:$folderName}),(t:Text {id:$textId}) MERGE (f)-[:CONTAINS]->(t)`.
+Check that exactly one folder matches first and verify membership afterward.
+Filing failure does not undo the saved lesson. Use graph transactions directly
+for ordinary organization; no dedicated rename endpoint is needed.
+
 `revision` on word status edits refers to the LearningStatus revision in the word-detail response, not the Word revision. Text revisions come from text detail. An import response contains a Text ID if deduplicated, or a durable Job ID. Poll the Job until ready/failed; failed jobs can be retried with POST `/jobs/{id}/retry`. Imports use local tokenization and JMdict only, with no model inference. Word identity is exact spelling. Multiple dictionary senses attach as Meaning nodes and appear on word click; adding a meaning preserves identity and statuses. Pronunciation and sentence translations are generated only on request, using cached results when available.
 
 Word/phrase status writes accept `onlyIfNew: true` for an atomic conditional update. The reader uses this when opening a word so concurrent Familiar/Known changes cannot be downgraded. `/speech/play?occurrenceId=...` is a native media URL: it resolves the lazy pronunciation job and redirects to its cached WAV, preserving browser user-gesture playback permission. Agents may still use POST `/speech` to obtain a cache URL or Job ID directly.
@@ -66,7 +76,7 @@ The compiler deliberately supports a documented OML subset and rejects unsupport
 
 ## Inspectable import action
 
-Submit `POST /imports` with `{ "title": "Lesson", "body": "猫を見ました。", "folder": "Japanese" }`. Poll `GET /jobs/{jobId}`. Both this endpoint and `GET /jobs` expose title, state, attempts, error, result, and progress:
+Submit `POST /imports` with `{ "title": "Lesson", "body": "猫を見ました。" }`. Folder creation and assignment are separate graph operations after import. Duplicate folder names are rejected before import work is queued. Poll `GET /jobs/{jobId}`. Both this endpoint and `GET /jobs` expose title, state, attempts, error, result, and progress:
 
 - `stage`: queued, starting, dictionary, saving, validating, ready, or failed.
 - `completed` / `total`: sentences processed in the current work stage.

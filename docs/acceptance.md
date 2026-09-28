@@ -1,5 +1,17 @@
 # Release acceptance
 
+## Import and folder separation, 2026-09-29
+
+Ingestion saves unfiled lessons and source provenance. Folder renaming and filing
+use the existing validated graph transaction interface, independently of import.
+The real acceptance stack verified unfiled library visibility, in-place rename,
+failed filing preserving the completed import, subsequent successful filing,
+content deduplication and provenance preservation in 94.1 seconds. The 27 focused
+API/import/migration tests passed in 9.49 seconds. No UI or ontology changes were
+included. Library ordering uses creation time rather than modification time.
+The production first item and folder membership were verified after deployment.
+Agent workflow and graph-query examples are in the skill.
+
 Release checks and production verification completed on 2026-09-28. The implementation contract is in
 [implementation.md](implementation.md); setup and test commands are in
 [the README](../README.md).

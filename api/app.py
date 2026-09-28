@@ -25,7 +25,8 @@ class RetokenizeApply(Strict):
 class Import(Strict):
     title:str=Field(min_length=1,max_length=200)
     body:str=Field(min_length=1,max_length=50000)
-    folder:str=''
+    # Older clients send this field. Ingestion no longer assigns folders.
+    folder:str=Field(default='',deprecated=True,description='Ignored. Assign folder membership separately through a graph transaction.')
     sourceUrl:str=''
     previousId:str|None=None
 class ImportResult(Strict):

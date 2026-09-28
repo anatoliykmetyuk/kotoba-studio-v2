@@ -38,6 +38,77 @@ def test_goal_fields_absent_and_settings_validated(client,monkeypatch):
  assert client.patch('/api/v1/settings',json={'fontSize':22,'lineHeight':1.95}).status_code==200
  saved=client.get('/api/v1/settings').json();assert saved['fontSize']==22 and saved['lineHeight']==1.95
 
+def test_agent_folder_rename_and_filing_are_separate_from_import(client):
+ from api import domain
+ graph=app.state.graph
+ folder=graph.write('test.folder',lambda t:t.create('Folder','folder:original',name='Original'))
+ other=graph.write('test.folder',lambda t:t.create('Folder','folder:occupied',name='Occupied'))
+ payload={'title':'Folder fixture','body':'Folder fixture','sourceUrl':'https://example.com/fixture'}
+ assert client.post('/api/v1/imports',json=payload|{'folderId':folder['id']}).status_code==422
+ submitted=client.post('/api/v1/imports',json=payload|{'folder':'Original'}).json()
+ headers={'Authorization':'Bearer api-test-worker'}
+ claimed=client.post('/api/v1/worker/claim',headers=headers).json()['job']
+ assert claimed['id']==submitted['jobId']
+ done=client.post('/api/v1/worker/'+claimed['id']+'/complete',headers=headers,json={'attempt':claimed['attempts'],'result':{'sentences':[]}})
+ assert done.status_code==200
+ text_id=done.json()['textId'];before=client.get('/api/v1/texts/'+text_id).json()
+ assert before['sources'][0]['url']==payload['sourceUrl']
+ def transaction(query,params,dry=False):
+  return client.post('/api/v1/graph/transaction',json={'statements':[{'query':query,'params':params}],'dryRun':dry})
+ rename='MATCH (f:Folder {name:$old}) SET f.name=$new'
+ assert transaction(rename,{'old':'Original','new':'Renamed'},True).status_code==200
+ assert graph.read(lambda t:t.get(folder['id']))['name']=='Original'
+ assert transaction(rename,{'old':'Original','new':'Renamed'}).status_code==200
+ renamed=graph.read(lambda t:t.get(folder['id']))
+ assert renamed['id']==folder['id'] and renamed['identityKey']==folder['identityKey']
+ assert transaction(rename,{'old':'Renamed','new':' oCCUPIED '}).status_code==422
+ assert client.get('/api/v1/texts/'+text_id).json()==before
+ assert next(t for t in client.get('/api/v1/texts').json() if t['id']==text_id)['folders']==[]
+ # Filing fails in its own transaction and cannot undo the saved lesson.
+ invalid='MATCH (f:Folder {name:$folder}),(t:Text {id:$text}) CREATE (t)-[:CONTAINS]->(f)'
+ assert transaction(invalid,{'folder':'Renamed','text':text_id}).status_code==422
+ assert client.get('/api/v1/texts/'+text_id).json()==before
+ assert client.get('/api/v1/jobs/'+claimed['id']).json()['state']=='ready'
+ attach='MATCH (f:Folder {name:$folder}),(t:Text {id:$text}) MERGE (f)-[:CONTAINS]->(t)'
+ assert transaction(attach,{'folder':'Renamed','text':text_id}).status_code==200
+ assert client.post('/api/v1/imports',json=payload).json()['textId']==text_id
+ saved=next(t for t in client.get('/api/v1/texts').json() if t['id']==text_id)
+ assert [f['name'] for f in saved['folders']]==['Renamed']
+ assert transaction(rename,{'old':'Renamed','new':'Renamed again'}).status_code==200
+ saved=next(t for t in client.get('/api/v1/texts').json() if t['id']==text_id)
+ assert [f['name'] for f in saved['folders']]==['Renamed again']
+ assert saved['folders'][0]['id']==folder['id']
+ # Old queued payloads must not perform folder writes at completion either.
+ legacy=graph.write('test.legacy',lambda t:domain.finalize_import(t,payload|{'body':'Legacy import fixture','folder':'Missing old folder'},{'sentences':[]}))
+ assert next(t for t in client.get('/api/v1/texts').json() if t['id']==legacy['textId'])['folders']==[]
+ assert client.get('/api/v1/graph/audit').json()['valid']
+
+
+def test_duplicate_folders_rejected_before_import_work(client):
+ graph=app.state.graph
+ folder=graph.read(lambda t:t.run('MATCH (f:Folder) RETURN properties(f) AS f LIMIT 1'))[0]['f']
+ # Deliberately corrupt only the disposable test database to exercise preflight.
+ bad=folder|{'id':'duplicate-folder-fixture','identityKey':'duplicate-folder-fixture','name':folder['name'].upper()}
+ before=graph.read(lambda t:t.run('MATCH (j:Job) RETURN count(j) AS n'))[0]['n']
+ try:
+  with graph.driver.session() as session:session.run('CREATE (f:Entity:Folder) SET f=$props',props=bad).consume()
+  response=client.post('/api/v1/imports',json={'title':'Must not start','body':'Must not start'})
+  assert response.status_code==422 and 'Duplicate folder names' in response.text
+  assert graph.read(lambda t:t.run('MATCH (j:Job) RETURN count(j) AS n'))[0]['n']==before
+ finally:
+  with graph.driver.session() as session:session.run('MATCH (f:Folder {id:"duplicate-folder-fixture"}) DELETE f').consume()
+
+def test_library_sorts_by_added_time_not_modification(client):
+ from api import domain
+ def create(t):
+  older=t.create('Text','text:sort-older',title='Older',body='sort older fixture',textState='new',cursor=0,archived=False,createdAt='2025-01-01T00:00:00Z')
+  newer=t.create('Text','text:sort-newer',title='Newer',body='sort newer fixture',textState='new',cursor=0,archived=False,createdAt='2025-02-01T00:00:00Z')
+  t.update(older['id'],title='Older edited last')
+  return older['id'],newer['id']
+ older,newer=app.state.graph.write('test.library-order',create)
+ ids=[t['id'] for t in client.get('/api/v1/texts').json()]
+ assert ids.index(newer)<ids.index(older)
+
 def test_migration_empty_check_cannot_erase_settings(client):
  snapshot=client.get('/api/v1/graph/export').json();report={'id':'report','identityKey':'legacy:report','revision':0,'createdAt':'now','updatedAt':'now','payload':json.dumps({'sourceSha256':'fixture'})}
  clean={'nodes':[n for n in snapshot['nodes'] if 'Schema' in n['labels']]+[{'labels':['Entity','Migration'],'properties':report}],'edges':[]}

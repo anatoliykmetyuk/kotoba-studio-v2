@@ -21,6 +21,14 @@ deduplicates; per-Text placements and token occurrences retain original offsets.
 Identical content and identities deduplicate. Texts independently track New or
 Completed and their furthest reading position.
 
+Folder names are unique and editable in place through graph queries. Lesson
+ingestion does not create folders or assign membership. New imports appear
+unfiled in All texts; agents attach them to folders in a separate graph transaction.
+Filing failure must not undo the imported lesson. Duplicate folder names fail
+import preflight before any lesson work. The broader ontology refactor is deferred.
+Library order is creation time, newest first; reading and organization edits do
+not move older lessons ahead of newer imports.
+
 There is no Writing functionality, journal migration, daily target, point,
 streak or related goal-system record.
 

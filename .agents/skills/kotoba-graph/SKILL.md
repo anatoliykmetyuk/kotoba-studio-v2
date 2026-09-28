@@ -9,16 +9,62 @@ Run `./kotoba` from this repository. It targets production; add `--environment a
 
 Use the predefined import API. Do not construct corpus nodes yourself, run the worker directly, or use a language model during import to translate words or select meanings.
 
-1. Write a UTF-8 JSON file with `title`, `body`, and optional `folder` and `sourceUrl`. Preserve the supplied text and line breaks.
+1. Write a UTF-8 JSON file with `title`, `body`, and optional `sourceUrl`. Preserve the supplied text and line breaks. Do not pass a folder name or folder ID. The deprecated `folder` field is accepted from old clients but ignored; import never assigns membership. Import checks for duplicate folder names before queuing any lesson work.
 2. Submit `./kotoba request POST /imports --file import.json`.
-3. A duplicate returns `textId` immediately and attaches the requested folder. Otherwise, retain the returned `jobId` and poll `./kotoba request GET /jobs/JOB_ID` until `state` is `ready` or `failed`.
+3. A duplicate returns `textId` immediately without changing memberships. Otherwise, retain the returned `jobId` and poll `./kotoba request GET /jobs/JOB_ID` until `state` is `ready` or `failed`.
 4. Report the actual `progress.stage`, `percent`, `completed`/`total` sentence counts, `elapsedSeconds`, and `estimatedRemainingSeconds`. The estimate is approximate and can be null before enough work completes. `secondsSinceProgress`, `stalled`, and `leaseExpiresAt` expose inactivity. Do not invent a percentage or ETA. `/jobs` lists recent jobs with the same details.
 5. On failure, inspect `error` and `attempts`. Retry a transient failure with `POST /jobs/JOB_ID/retry`; do not keep retrying an unchanged persistent error. An expired worker lease can be recovered through this retry action. A healthy running import cannot be restarted by retry.
-6. Once ready, read `result.textId`, verify `GET /texts/TEXT_ID`, and confirm its folder in `GET /texts`. Only then report that the lesson is ready.
+6. Once ready, read `result.textId` and verify `GET /texts/TEXT_ID` and `GET /texts`. A newly imported lesson has no folder and is visible in the home Library under All texts. Verify source provenance when supplied.
+7. If the user requested a folder, attach the saved Text yourself with a separate graph transaction, as below. Verify membership afterward. If filing fails, retain the imported lesson and correct only the filing operation; never roll back, delete, or reimport the lesson because folder assignment failed.
 
 English/Latin runs are excluded from vocabulary before dictionary lookup and again at the import API boundary; original lesson text, offsets, and phrase-selection content are preserved. Mixed Japanese spellings remain eligible.
 
 Import performs local Ichiran tokenization and its JMdict lookup only. Ichiran uses its upstream boundaries and conjugations; do not add application grammar rules. Report cases it handles poorly. It never requests model inference, sentence translations, or pronunciation. Stages are queued, starting, dictionary, saving, validating, and ready; percentage reaches 100 only after the atomic graph write succeeds.
+
+## Agent graph operations
+
+Rule of thumb: if an API exists for the requested action, use that API. If no
+API exists for it, execute queries directly against the graph database through
+the existing query/transaction interface.
+
+Use graph queries directly for ordinary data management authorized by the user
+when no standardized API covers that action.
+Do not create a new typed endpoint, UI control, or script for each trivial graph
+operation. Standardized APIs encode standardized workflows such as lesson
+ingestion, learning transitions, translation and pronunciation. They are not a
+requirement to encode every possible graph edit.
+
+Use `./kotoba query` for reads and `./kotoba transaction` for parameterized Cypher
+writes. These execute graph queries with the existing transactional conformance
+checks. Inspect the exact targets, dry-run, then apply. Do not ask the user again
+for permission for ordinary queries/edits already covered by their request.
+An unsupported typed endpoint is not a blocker: use the graph transaction.
+
+Folder names are unique, ignoring surrounding whitespace and case. Identify the
+folder by its current name. Never derive or look up an `identityKey` from that
+name. The current schema still carries legacy IDs; preserve those during an
+in-place edit until the separately planned ontology refactor.
+
+Rename the same folder node:
+```cypher
+MATCH (f:Folder {name:$oldName})
+SET f.name=$newName
+RETURN f.name
+```
+
+Attach an already imported lesson independently:
+```cypher
+MATCH (f:Folder {name:$folderName}), (t:Text {id:$textId})
+MERGE (f)-[:CONTAINS]->(t)
+RETURN f.name, t.id
+```
+
+Require exactly one target folder before filing. Zero matches means the requested
+folder is missing; multiple matches are a data error, never permission to pick
+one. Inspect returned rows and verify the saved membership. Creating a folder,
+when requested, is also a graph operation and must satisfy the current schema.
+Never replace a folder or move its lessons merely to rename it. A conflicting
+name must fail atomically. Graph edits leave Text bodies and reading progress alone.
 
 ## Words and on-demand actions
 

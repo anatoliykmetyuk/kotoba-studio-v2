@@ -66,10 +66,17 @@ def word_form(t,base,token):
         t.link(word['id'],'BASE_FORM',base['id'])
     return word
 
+def folders(t):
+    return [r['folder'] for r in t.run('MATCH (f:Folder) RETURN properties(f) AS folder ORDER BY f.name')]
+
+def validate_folder_names(t):
+    names=set()
+    for folder in folders(t):
+        name=folder['name'].strip().casefold()
+        if name in names:raise InvalidGraph('Duplicate folder names. Resolve them before importing lessons.')
+        names.add(name)
+
 def add_source(t,text,payload):
-    folder=payload.get('folder','').strip()
-    if folder:
-        f=t.create('Folder','folder:'+folder.casefold(),name=folder);t.link(f['id'],'CONTAINS',text['id'])
     url=payload.get('sourceUrl','').strip()
     if url:
         s=t.create('Source','source:'+url,url=url,sourceType='youtube' if 'youtu' in url else 'article')
@@ -80,6 +87,8 @@ def create_job(t,kind,payload,key=None):
     return t.create('Job',key or 'job:'+uid(),kind=kind,payload=packed(payload),result='{}',error='',jobState='pending',lease='',attempts=0)
 
 def prepare_import(t,payload):
+    validate_folder_names(t)
+    payload={k:v for k,v in payload.items() if k not in ('folder','folderId')}
     body=payload['body'].replace('\r\n','\n').replace('\r','\n')
     if not body.strip():raise ValueError('Paste some Japanese text first.')
     existing=t.find('text:'+digest(body))
@@ -134,7 +143,7 @@ def text_detail(t,id):
 
 def library(t):
     rows=t.run('''MATCH (t:Text) OPTIONAL MATCH (f:Folder)-[:CONTAINS]->(t)
-    RETURN properties(t) AS text,collect(properties(f)) AS folders ORDER BY text.updatedAt DESC''')
+    RETURN properties(t) AS text,collect(properties(f)) AS folders ORDER BY text.createdAt DESC,text.id''')
     return [r['text']|{'folders':r['folders'],'bodyLength':len(r['text']['body']),'excerpt':r['text']['body'][:100]} for r in rows]
 
 def word_meanings(t,id):

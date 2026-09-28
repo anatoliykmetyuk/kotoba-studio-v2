@@ -113,7 +113,7 @@ Use predefined API actions instead of bypassing validation with direct database 
 ./kotoba query 'MATCH (t:Text) RETURN t.id, t.title LIMIT 20'
 ```
 
-`lesson.json` contains `title`, `body`, and optionally `folder` and `sourceUrl`. Imports expose stage, processed/total sentence counts, percentage, elapsed time, estimated remaining time, and errors. The skill documents both standard actions and validated graph transactions.
+`lesson.json` contains `title`, `body`, and optionally `sourceUrl`. New imports appear unfiled in All texts. Agents attach a lesson to a folder afterward through a separate graph transaction. Imports expose stage, processed/total sentence counts, percentage, elapsed time, estimated remaining time, and errors. The skill documents the rule: use an existing API for an action when available; otherwise execute graph queries through the validated transaction interface.
 
 ## Development and verification
 
