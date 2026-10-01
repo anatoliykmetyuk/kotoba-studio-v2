@@ -51,7 +51,7 @@ def migrate(snapshot):
     for e in edges:
         if e['type']=='STATUS' and e['from'] in original:
             owner=mapping[chosen[original[e['from']]['family']]]
-            status_groups[(owner,nodes[e['to']]['properties']['area'])].append(e['to'])
+            status_groups[(owner,nodes[e['to']]['properties'].get('area'))].append(e['to'])
     def merge_status(owner,area,ids):
         keep=min(ids,key=lambda id:(nodes[id]['properties']['identityKey']!=f'status:{owner}:{area}',id))
         values=[copy.deepcopy(nodes[id]['properties']) for id in ids];p=nodes[keep]['properties']
@@ -82,7 +82,7 @@ def migrate(snapshot):
         groups=defaultdict(list)
         for e in rebuilt:
             if e['type']=='STATUS' and ('Phrase' in nodes[e['from']]['labels']):
-                groups[(phrase_map.get(e['from'],e['from']),nodes[e['to']]['properties']['area'])].append(e['to'])
+                groups[(phrase_map.get(e['from'],e['from']),nodes[e['to']]['properties'].get('area'))].append(e['to'])
         added=[]
         for (owner,area),ids in groups.items():merge_status(owner,area,ids)
         rebuilt=[e for e in rebuilt if not(e['type']=='STATUS' and 'Phrase' in nodes[e['from']]['labels'])]

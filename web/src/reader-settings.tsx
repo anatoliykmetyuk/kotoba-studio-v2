@@ -54,7 +54,6 @@ export function ReaderSettings({settings,change}:{settings:Settings;change:(chan
   <RangeSetting label="Reading size" value={settings.fontSize} min={16} max={32} step={1} format={value=>`${value}px`} change={fontSize=>change({fontSize})}/>
   <RangeSetting label="Line spacing" value={settings.lineHeight} min={1.4} max={2.4} step={.05} format={value=>value.toFixed(2)} change={lineHeight=>change({lineHeight})}/>
   <label className="check-label"><input type="checkbox" checked={settings.furigana} onChange={event=>change({furigana:event.target.checked})}/>Furigana for New and Learning words</label>
-  <label>Learning area<select value={settings.area} onChange={event=>change({area:event.target.value as Settings['area']})}><option value="listening">Listening</option><option value="reading">Reading</option></select></label>
   <p className="dictionary-attribution">Dictionary: <a href="/licenses/JMdict-documentation.html" target="_blank" rel="noreferrer">JMdict</a> by James William Breen and EDRDG, <a href="/licenses/EDRDG-license.html" target="_blank" rel="noreferrer">CC BY-SA 4.0</a>. Tokenizer: <a href="https://github.com/tshatrov/ichiran" target="_blank" rel="noreferrer">Ichiran</a>.</p>
  </div>;
 }

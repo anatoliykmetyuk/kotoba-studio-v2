@@ -15,7 +15,7 @@ for(const name of ['api','speech-queue','speech']){
  const compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText.replace(/from ['"]\.\/(api|speech-queue)['"]/g,"from './$1.mjs'");
  await writeFile(path.join(output,name+'.mjs'),compiled);
 }
-const {waitJob}=await import(pathToFileURL(path.join(output,'api.mjs')));
+const {waitJob,unifyCachedStatuses}=await import(pathToFileURL(path.join(output,'api.mjs')));
 const {PlaybackQueue}=await import(pathToFileURL(path.join(output,'speech-queue.mjs')));
 let sequence=0;
 const speech=()=>import(pathToFileURL(path.join(output,'speech.mjs'))+'?case='+sequence++);
@@ -146,4 +146,22 @@ test('clicked tokens prepare immediately while their playback remains sequential
  queue.clear();assert.equal(canceled,1);queue.ended();assert.deepEqual(played,['first','second']);
  queue.enqueue('after stop');assert.deepEqual(prepared,['first','second','third','after stop']);
  assert.deepEqual(played,['first','second','after stop']);
+});
+
+
+test('older offline read-cache statuses migrate to the lower state without changing source data',()=>{
+ const order=['new','learning','familiar','known'];
+ for(const reading of order)for(const listening of order){
+  const token={surface:'試験',states:{reading,listening},statusRevisions:{reading:2,listening:8}};
+  const text={body:'試験',cursor:1,sentences:[{body:'試験',tokens:[token]}]};
+  const unified=unifyCachedStatuses('/texts/fixture',text);
+  assert.equal(unified.sentences[0].tokens[0].state,order[Math.min(order.indexOf(reading),order.indexOf(listening))]);
+  assert.equal(unified.sentences[0].tokens[0].statusRevision,8);
+  assert.equal(unified.body,text.body);assert.equal(unified.cursor,1);assert.equal(token.state,undefined);
+  const word=unifyCachedStatuses('/words/fixture',{statuses:{reading:{state:reading,revision:2},listening:{state:listening,revision:8}}});
+  assert.equal(word.status.state,unified.sentences[0].tokens[0].state);assert.equal(word.status.revision,8);
+ }
+ const current={status:{state:'known',revision:10}};
+ assert.equal(unifyCachedStatuses('/words/fixture',current),current);
+ assert.equal(unifyCachedStatuses('/texts/fixture/completion',current),current);
 });

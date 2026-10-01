@@ -14,11 +14,20 @@ MEANING_ORDER="""m.sourceType,
     CASE WHEN m.sourceKey STARTS WITH 'jmdict:' THEN toInteger(split(m.sourceKey,':')[1]) END,
     CASE WHEN m.sourceKey STARTS WITH 'jmdict:' THEN toInteger(split(m.sourceKey,':')[2]) END,
     m.sourceKey,m.body"""
+def learning_status(t,owner):
+    rows=t.run('MATCH (w:Entity {id:$id})-[:STATUS]->(s:LearningStatus) RETURN properties(s) AS s',id=owner)
+    if len(rows)!=1:raise InvalidGraph('Family requires one learning status')
+    return rows[0]['s']
+
 def status_nodes(t,owner):
-    return {r['s']['area']:r['s'] for r in t.run('MATCH (w:Entity {id:$id})-[:STATUS]->(s) RETURN properties(s) AS s',id=owner)}
+    # Transitional read aliases for already installed clients. There is only
+    # one stored status, revision and write queue for the family.
+    status=learning_status(t,owner)
+    return {area:status for area in AREAS}
+
 def create_statuses(t,owner,states=None):
-    for area in AREAS:
-        s=t.create('LearningStatus',f'status:{owner}:{area}',area=area,state=(states or {}).get(area,'new'));t.link(owner,'STATUS',s['id'])
+    state=min(states.values(),key=STATES.index) if states else 'new'
+    s=t.create('LearningStatus',f'status:{owner}',state=state);t.link(owner,'STATUS',s['id'])
 def add_meanings(t,word,choices,*,direct_lookup=False):
     if not any(c.get('meaning','').strip() for c in choices):return
     stored={(m['sourceType'],m['sourceKey']) for m in t.meaning_sources(word['id'])}
@@ -136,10 +145,11 @@ def text_detail(t,id):
     for r in rows:
         p=r['p']; group=groups.setdefault(p['id'],p|{'sentenceId':r['s']['id'],'body':r['s']['body'],'tokens':[]})
         if r['o']:
-            group['tokens'].append(r['o']|{'wordId':r['w']['id'],'surface':r['w']['surface'],'baseId':r['b']['id'],'base':r['b']['surface'],'meaning':'','states':{s['area']:s['state'] for s in r['states']},'statusRevisions':{s['area']:s['revision'] for s in r['states']}})
+            group['tokens'].append(r['o']|{'wordId':r['w']['id'],'surface':r['w']['surface'],'baseId':r['b']['id'],'base':r['b']['surface'],'meaning':'','state':r['states'][0]['state'],'statusRevision':r['states'][0]['revision'],'states':{area:r['states'][0]['state'] for area in AREAS},'statusRevisions':{area:r['states'][0]['revision'] for area in AREAS}})
     sources=t.run('MATCH (t:Text {id:$id})-[:PROVENANCE]->(p)-[:SOURCE]->(s) RETURN properties(s) AS source',id=id)
+    memberships=t.run('MATCH (f:Folder)-[:CONTAINS]->(:Text {id:$id}) RETURN properties(f) AS folder ORDER BY f.name',id=id)
     phrases=t.run('MATCH (t:Text {id:$id})-[:PHRASE]->(p) OPTIONAL MATCH (p)-[:STATUS]->(s) RETURN properties(p) AS phrase, collect(properties(s)) AS states',id=id)
-    return text|{'sentences':list(groups.values()),'sources':[x['source'] for x in sources],'phrases':phrases}
+    return text|{'sentences':list(groups.values()),'sources':[x['source'] for x in sources],'phrases':phrases,'folders':[r['folder'] for r in memberships]}
 
 def library(t):
     rows=t.run('''MATCH (t:Text) OPTIONAL MATCH (f:Folder)-[:CONTAINS]->(t)
@@ -160,29 +170,26 @@ def word_detail(t,id):
     examples=t.run('''MATCH (t:Text)-[:PLACEMENT]->(p)-[:TOKEN]->(o)-[:WORD]->(w:Word)-[:BASE_FORM]->(b:Word {id:$id})
     MATCH (p)-[:SENTENCE]->(s) RETURN DISTINCT t.id AS textId,t.title AS title,t.textState AS textState,s.id AS sentenceId,p.id AS occurrenceId,s.body AS body,p.start AS start,p.end<=t.cursor AS seen ORDER BY title,start LIMIT 50''',id=base['id'])
     meanings=word_meanings(t,id)
-    return w|{'meaning':'; '.join(m['body'] for m in meanings),'meanings':meanings,'base':base,'statuses':status_nodes(t,base['id']),'forms':[x['w'] for x in forms],'examples':examples}
+    status=learning_status(t,base['id'])
+    return w|{'meaning':'; '.join(m['body'] for m in meanings),'meanings':meanings,'base':base,'status':status,'statuses':{area:status for area in AREAS},'forms':[x['w'] for x in forms],'examples':examples}
 
 def set_status(t,id,area,state,revision=None,only_if_new=False):
-    if area not in AREAS or state not in STATES:raise ValueError('Invalid learning status')
+    # Deprecated area arguments from installed clients address the same status.
+    if area is not None and area not in AREAS or state not in STATES:raise ValueError('Invalid learning status')
     w=t.get(id);owner=w['family'] if w['type']=='Word' else id
-    statuses=status_nodes(t,owner)
-    if area not in statuses:raise ValueError('This entity has no word learning status')
-    s=statuses[area]
-    if only_if_new and s['state']!='new':return {'baseId':owner,'area':area,'state':s['state'],'revision':s['revision']}
+    if w['type'] not in ('Word','Phrase'):raise ValueError('This entity has no learning status')
+    s=learning_status(t,owner)
+    if only_if_new and s['state']!='new':return {'baseId':owner,'state':s['state'],'revision':s['revision']}
     updated=t.update(s['id'],expected=revision,state=state)
-    return {'baseId':owner,'area':area,'state':state,'revision':updated['revision']}
+    return {'baseId':owner,'state':state,'revision':updated['revision']}
 
 def learn_word(t,id):
     word=t.get(id)
     if word['type']!='Word':raise Missing('Word not found')
-    statuses=status_nodes(t,word['family'])
-    if set(statuses)!=set(AREAS):raise InvalidGraph('Word family must have both learning statuses')
-    result={}
-    for area in ('listening','reading'):
-        status=statuses[area]
-        if status['state']=='new':status=t.update(status['id'],state='learning')
-        result[area]={'state':status['state'],'revision':status['revision']}
-    return {'baseId':word['family'],'statuses':result}
+    status=learning_status(t,word['family'])
+    if status['state']=='new':status=t.update(status['id'],state='learning')
+    result={'state':status['state'],'revision':status['revision']}
+    return {'baseId':word['family'],'status':result,'statuses':{area:result for area in AREAS}}
 
 def text_state(t,id,state,revision=None):
     if state not in ('new','completed'):raise ValueError('Invalid text status')
@@ -208,7 +215,7 @@ def progress(t,id,cursor):
     return text
 
 def explore(t,query='',area='reading',minimum=0,seen='all',word_id=None,offset=0,limit=100):
-    if area not in AREAS or seen not in ('all','seen','unseen') or not 0<=minimum<=1:raise ValueError('Invalid exploration filter')
+    if area is not None and area not in AREAS or seen not in ('all','seen','unseen') or not 0<=minimum<=1:raise ValueError('Invalid exploration filter')
     start="MATCH (t:Text)-[:PLACEMENT]->(p)-[:SENTENCE]->(s)" if word_id is None else "MATCH (selected:Word {id:$word})<-[:BASE_FORM*0..1]-(w:Word)<-[:WORD]-()<-[:TOKEN]-(p)<-[:PLACEMENT]-(t:Text) MATCH (p)-[:SENTENCE]->(s)"
     rows=t.run(start+''' WHERE t.archived=false AND ($seen='all' OR (p.end<=t.cursor)=($seen='seen'))
       AND ($q='' OR toLower(s.body+' '+t.title) CONTAINS $q OR EXISTS {
@@ -217,9 +224,9 @@ def explore(t,query='',area='reading',minimum=0,seen='all',word_id=None,offset=0
         OR EXISTS { MATCH (b)-[:HAS_MEANING]->(m) WHERE toLower(m.body) CONTAINS $q }
       })
       WITH DISTINCT t,p,s,size([(p)-[:TOKEN]->(o) | o]) AS tokenCount
-      WHERE tokenCount>0 AND ($minimum=0 OR size([(p)-[:TOKEN]->()-[:WORD]->()-[:BASE_FORM]->()-[:STATUS]->(st {area:$area}) WHERE st.state='known' | st])*1.0/CASE tokenCount WHEN 0 THEN 1 ELSE tokenCount END >= $minimum)
+      WHERE tokenCount>0 AND ($minimum=0 OR size([(p)-[:TOKEN]->()-[:WORD]->()-[:BASE_FORM]->()-[:STATUS]->(st:LearningStatus) WHERE st.state='known' | st])*1.0/CASE tokenCount WHEN 0 THEN 1 ELSE tokenCount END >= $minimum)
       WITH t,p,s ORDER BY t.updatedAt DESC,p.ordinal SKIP $offset LIMIT $limit
-      MATCH (p)-[:TOKEN]->(o)-[:WORD]->(w)-[:BASE_FORM]->(b)-[:STATUS]->(st {area:$area})
+      MATCH (p)-[:TOKEN]->(o)-[:WORD]->(w)-[:BASE_FORM]->(b)-[:STATUS]->(st:LearningStatus)
       WITH t,p,s,o,w,b,st,reduce(unique=[],m IN [(b)-[:HAS_MEANING]->(m) | m.body]+[(w)-[:HAS_MEANING]->(m) | m.body] | CASE WHEN m IN unique THEN unique ELSE unique+[m] END) AS meanings ORDER BY o.ordinal
       WITH t,p,s,collect({surface:w.surface,reading:o.reading,occurrenceId:o.id,base:b.surface,baseReading:b.reading,meaning:coalesce(head(meanings),''),baseId:b.id,state:st.state,wordId:w.id,start:o.start,end:o.end}) AS words,
            sum(CASE st.state WHEN 'known' THEN 1.0 ELSE 0.0 END)/count(*) AS coverage

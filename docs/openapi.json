@@ -677,8 +677,18 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "default": "reading",
+              "anyOf": [
+                {
+                  "enum": [
+                    "reading",
+                    "listening"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Area"
             }
           },
@@ -1431,12 +1441,18 @@
             "in": "query",
             "required": false,
             "schema": {
-              "enum": [
-                "reading",
-                "listening"
+              "anyOf": [
+                {
+                  "enum": [
+                    "reading",
+                    "listening"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
               ],
-              "type": "string",
-              "default": "reading",
               "title": "Area"
             }
           },
@@ -1446,7 +1462,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "default": "new,learning,familiar,known",
+              "default": "learning,familiar",
               "title": "States"
             }
           }
@@ -1988,12 +2004,21 @@
             "title": "Ids"
           },
           "area": {
-            "type": "string",
-            "enum": [
-              "reading",
-              "listening"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "reading",
+                  "listening"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Area"
+            "title": "Area",
+            "description": "Ignored. Learning status is unified.",
+            "deprecated": true
           },
           "state": {
             "type": "string",
@@ -2010,7 +2035,6 @@
         "type": "object",
         "required": [
           "ids",
-          "area",
           "state"
         ],
         "title": "BatchStatuses"
@@ -2280,14 +2304,20 @@
             "type": "string",
             "title": "Baseid"
           },
+          "status": {
+            "$ref": "#/components/schemas/LearningState"
+          },
           "statuses": {
-            "$ref": "#/components/schemas/LearningAreas"
+            "$ref": "#/components/schemas/LearningAreas",
+            "description": "Compatibility aliases of the single status.",
+            "deprecated": true
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "baseId",
+          "status",
           "statuses"
         ],
         "title": "LearnResult"
@@ -2722,12 +2752,21 @@
       "Status": {
         "properties": {
           "area": {
-            "type": "string",
-            "enum": [
-              "reading",
-              "listening"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "reading",
+                  "listening"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Area"
+            "title": "Area",
+            "description": "Ignored. Learning status is unified.",
+            "deprecated": true
           },
           "state": {
             "type": "string",
@@ -2759,7 +2798,6 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "area",
           "state"
         ],
         "title": "Status"

@@ -101,13 +101,13 @@ def test_finalize_defends_worker_bypass_and_latin_base_without_changing_body():
 def test_cleanup_preserves_source_family_status_meaning_and_numeric_usage():
     before=old_corpus();original=copy.deepcopy(before);after,report=plan(before)
     assert before==original and validate_graph(after)['valid']
-    assert report['removed']=={'Encounter':1,'Job':1,'LearningStatus':10,'Meaning':1,'Phrase':1,'PhraseMember':2,'Speech':1,'Word':5,'WordOccurrence':5}
+    assert report['removed']=={'Encounter':1,'Job':1,'LearningStatus':5,'Meaning':1,'Phrase':1,'PhraseMember':2,'Speech':1,'Word':5,'WordOccurrence':5}
     assert report['remainingLatinWords']==0 and len(report['preservedFamilies'])==1
     props={n['properties']['id']:n['properties'] for n in after['nodes']}
     surviving={n['properties']['surface']:n['properties'] for n in after['nodes'] if 'Word' in n['labels']}
     assert set(surviving)=={'猫','犬','48'} and surviving['猫']['family']==surviving['猫']['id']
     statuses=[props[e['to']] for e in after['edges'] if e['type']=='STATUS' and e['from']==surviving['猫']['id']]
-    assert {s['area']:s['state'] for s in statuses}=={'reading':'known','listening':'familiar'}
+    assert len(statuses)==1 and statuses[0]['state']=='familiar'
     assert any(e['type']=='HAS_MEANING' and e['from']==surviving['猫']['id'] for e in after['edges'])
     for n in original['nodes']:
         if set(n['labels']) & {'Text','Sentence'}:assert props[n['properties']['id']]==n['properties']

@@ -52,8 +52,7 @@ def plan(snapshot, analysis):
         key='word:'+digest(surface);id=str(uuid.uuid5(uuid.NAMESPACE_URL,'https://kotoba.local/'+key))
         entity('Word',key,surface=surface,reading=reading,partOfSpeech=pos,family=id);words[surface]=id
         edges.add((id,'BASE_FORM',id))
-        for area in ('listening','reading'):
-            status=entity('LearningStatus',f'status:{id}:{area}',area=area,state='new');edges.add((id,'STATUS',status))
+        status=entity('LearningStatus',f'status:{id}',state='new');edges.add((id,'STATUS',status))
         return id
     def word(token):
         desired=token['selected']['base'];reading=token['selected'].get('baseReading',token['baseReading'])

@@ -55,7 +55,7 @@ class JobView(Strict):
     result:dict[str,Any]
     progress:ProgressView
 class Status(Strict):
-    area:Literal['reading','listening']
+    area:Literal['reading','listening']|None=Field(default=None,deprecated=True,description='Ignored. Learning status is unified.')
     state:Literal['new','learning','familiar','known']
     revision:int|None=None
     onlyIfNew:bool=False
@@ -67,7 +67,8 @@ class LearningAreas(Strict):
     reading:LearningState
 class LearnResult(Strict):
     baseId:str
-    statuses:LearningAreas
+    status:LearningState
+    statuses:LearningAreas=Field(deprecated=True,description="Compatibility aliases of the single status.")
 class TextStatus(Strict):
     state:Literal['new','completed']
     revision:int|None=None
@@ -124,7 +125,7 @@ class Merge(Strict):
     targetBaseId:str
 class BatchStatuses(Strict):
     ids:list[str]=Field(max_length=1000)
-    area:Literal['reading','listening']
+    area:Literal['reading','listening']|None=Field(default=None,deprecated=True,description='Ignored. Learning status is unified.')
     state:Literal['new','learning','familiar','known']
 class SettingsPatch(Strict):
     theme:Literal['light','dark','system']|None=None
@@ -251,7 +252,7 @@ def merge_families(p:Merge):
         return {'baseId':b['id'],'states':domain.status_nodes(t,b['id']),'merged':len(rows)}
     return graph().write('family.merge',apply)
 @app.get('/api/v1/explore')
-def explore(q:str='',area:str='reading',minimum:float=0,seen:str='all',wordId:str|None=None,offset:int=0,limit:int=100):return graph().read(lambda t:domain.explore(t,q,area,minimum,seen,wordId,offset,limit))
+def explore(q:str='',area:Literal['reading','listening']|None=None,minimum:float=0,seen:str='all',wordId:str|None=None,offset:int=0,limit:int=100):return graph().read(lambda t:domain.explore(t,q,area,minimum,seen,wordId,offset,limit))
 @app.post('/api/v1/texts/{id}/phrases')
 def phrase(id:str,p:PhraseRequest):return graph().write('phrase.create',lambda t:domain.create_phrase(t,id,p.occurrenceIds,p.meaning))
 @app.put('/api/v1/phrases/{id}/status')
@@ -394,7 +395,7 @@ def translation(p:Translate):
     return graph().write('translation.request',create)
 @app.get('/api/v1/settings')
 def settings():
-    s=graph().read(lambda t:t.find('settings:user'));return json.loads(s['payload']) if s else {'theme':'system','fontSize':20,'lineHeight':1.85,'readerLayout':'book','furigana':True,'area':'reading'}
+    s=graph().read(lambda t:t.find('settings:user'));return json.loads(s['payload']) if s else {'theme':'system','fontSize':20,'lineHeight':1.85,'readerLayout':'book','furigana':True}
 @app.put('/api/v1/settings')
 def save_settings(p:dict[str,Any]):
     def save(t):
@@ -415,14 +416,14 @@ def statistics():
 def activity():
     return graph().read(lambda t:t.run('MATCH (a:Activity) RETURN a.day AS day,a.kind AS kind,sum(a.amount) AS amount ORDER BY day DESC'))
 @app.get('/api/v1/practice')
-def practice(textId:str=QueryParam(min_length=1),area:Literal['reading','listening']='reading',states:str='new,learning,familiar,known'):
+def practice(textId:str=QueryParam(min_length=1),area:Literal['reading','listening']|None=None,states:str='learning,familiar'):
     allowed=set(states.split(','))
     if not allowed or not allowed<=set(domain.STATES):raise ValueError('Invalid practice statuses')
     def lesson(t):
         if t.get(textId)['type']!='Text':raise Missing('Text not found')
         rows=t.run('''MATCH (t:Text {id:$text})-[:PLACEMENT]->(p)-[:SENTENCE]->(s)
           USING INDEX t:Text(id)
-          MATCH (p)-[:TOKEN]->(o)-[:WORD]->(w)-[:BASE_FORM]->(b)-[:STATUS]->(st {area:$area})
+          MATCH (p)-[:TOKEN]->(o)-[:WORD]->(w)-[:BASE_FORM]->(b)-[:STATUS]->(st:LearningStatus)
           CALL (b,w) {
             UNWIND CASE WHEN b=w THEN [b] ELSE [b,w] END AS owner
             MATCH (owner)-[:HAS_MEANING]->(m:Meaning)

@@ -17,6 +17,8 @@ def corpus():
  from cli.spelling_identity import migrate
  from api.schema import SCHEMA
  graph,_=migrate(json.loads(path.read_text()))
+ from cli.learning_status import migrate as unify
+ graph,_=unify(graph)
  for n in graph['nodes']:
   if 'Schema' in n['labels']:n['properties']['digest']=SCHEMA['digest']
  return graph
@@ -35,10 +37,11 @@ def test_migration_reconciliation_and_no_writing():
   base=evidence.get('wordIds',{}).get(base,base)
   base=next(e['to'] for e in graph['edges'] if e['from']==base and e['type']=='BASE_FORM')
   owned={e['to'] for e in graph['edges'] if e['from']==base and e['type']=='STATUS'}
-  actual={n['properties']['area']:n['properties']['state'] for n in graph['nodes'] if n['properties']['id'] in owned}
-  assert all(['new','learning','familiar','known'].index(actual[a])>=['new','learning','familiar','known'].index(v) for a,v in record['states'].items())
+  actual=[n['properties']['state'] for n in graph['nodes'] if n['properties']['id'] in owned]
+  order=['new','learning','familiar','known']
+  assert len(actual)==1 and order.index(actual[0])>=min(order.index(v) for v in record['states'].values())
 
-def test_phrase_requires_graph_members_and_both_statuses():
+def test_phrase_requires_graph_members_and_one_status():
  graph=corpus();phrase=next(n['properties']['id'] for n in graph['nodes'] if 'Phrase' in n['labels'])
  for relation in ('PHRASE_MEMBER','STATUS'):
   bad=copy.deepcopy(graph);bad['edges']=[e for e in bad['edges'] if not(e['from']==phrase and e['type']==relation)]

@@ -76,8 +76,8 @@ def main():
  q=sub.add_parser('retokenize-apply');q.add_argument('--job',required=True);q.add_argument('--backup',type=Path,required=True);q.add_argument('--fingerprint',required=True)
  q=sub.add_parser('vocabulary-plan')
  q=sub.add_parser('vocabulary-apply');q.add_argument('--backup',type=Path,required=True);q.add_argument('--fingerprint',required=True)
- q=sub.add_parser('schema-plan');q.add_argument('--transformation',type=Path);q.add_argument('--migration',choices=['spelling-identity'])
- q=sub.add_parser('schema-apply');q.add_argument('--transformation',type=Path);q.add_argument('--backup',type=Path,required=True);q.add_argument('--migration',choices=['spelling-identity'])
+ q=sub.add_parser('schema-plan');q.add_argument('--transformation',type=Path);q.add_argument('--migration',choices=['spelling-identity','learning-status'])
+ q=sub.add_parser('schema-apply');q.add_argument('--transformation',type=Path);q.add_argument('--backup',type=Path,required=True);q.add_argument('--migration',choices=['spelling-identity','learning-status'])
  a=p.parse_args();runtime,env=environment(a.environment);url=a.url or 'http://127.0.0.1:'+env['KOTOBA_PORT']
  if a.command=='start':
   start_ichiran()
@@ -127,13 +127,25 @@ def main():
   from api.schema import validate_graph,SCHEMA
   data=call(url,'/graph/export');old=call(url,'/schema')
   if a.command=='schema-apply':
-   a.backup.mkdir(parents=True,exist_ok=True);(a.backup/'graph.json').write_text(json.dumps(data,ensure_ascii=False));(a.backup/'schema.json').write_text(json.dumps(old))
+   a.backup.mkdir(parents=True,exist_ok=False);(a.backup/'graph.json').write_text(json.dumps(data,ensure_ascii=False));(a.backup/'schema.json').write_text(json.dumps(old))
    compose(a.environment,['exec','-T','api','tar','-czf','-','-C','/data','media'],stdout=(a.backup/'media.tar.gz').open('wb'))
   transformation=json.loads(a.transformation.read_text()) if a.transformation else []
-  payload={'statements':transformation,'apply':a.command=='schema-apply','migration':a.migration}
-  if payload['apply']:stop_worker(a.environment);compose(a.environment,['stop','api'])
+  from api.vocabulary_cleanup import fingerprint
+  payload={'statements':transformation,'apply':a.command=='schema-apply','migration':a.migration,'sourceSchema':old,'expectedFingerprint':fingerprint(data)}
   compose(a.environment,['build','api'])
-  proc=compose(a.environment,['run','--rm','--no-deps','-T','api','python','-m','cli.schema_admin'],input=json.dumps(payload),text=True,capture_output=True);result=json.loads(proc.stdout)
+  if payload['apply']:stop_worker(a.environment);compose(a.environment,['stop','api'])
+  try:
+   proc=compose(a.environment,['run','--rm','--no-deps','-T','api','python','-m','cli.schema_admin'],input=json.dumps(payload),text=True,capture_output=True);result=json.loads(proc.stdout)
+  except subprocess.CalledProcessError as error:
+   if payload['apply']:
+    # A failed transaction leaves the previous schema intact. Restart the
+    # existing container, whose image still matches it. An index failure after
+    # commit instead requires the newly built image matching the new schema.
+    try:committed=json.loads(error.stdout or '{}').get('applied',False)
+    except ValueError:committed=False
+    compose(a.environment,['up','-d','api'] if committed else ['start','api'])
+    wait_ready(url);start_worker(a.environment)
+   raise SystemExit(error.stderr or str(error)) from error
   if payload['apply']:
    compose(a.environment,['up','-d','api']);compose(a.environment,['restart','web']);wait_ready(url);start_worker(a.environment)
  else:raise SystemExit('Unknown command')

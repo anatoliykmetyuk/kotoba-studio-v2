@@ -33,7 +33,7 @@ def test_dedup_base_status_and_text_independence(graph):
     graph.write('test.status',lambda t:set_status(t,token['wordId'],'reading','known'))
     graph.write('test.complete',lambda t:text_state(t,a['textId'],'completed'))
     again=graph.read(lambda t:text_detail(t,a['textId']))
-    assert all(s['tokens'][0]['states']=={'reading':'known','listening':'new'} for s in again['sentences'])
+    assert all(s['tokens'][0]['states']=={'reading':'known','listening':'known'} for s in again['sentences'])
     graph.write('test.reopen',lambda t:text_state(t,a['textId'],'new'))
     assert graph.read(lambda t:t.get(a['textId']))['cursor']==len(body)
 
@@ -94,13 +94,13 @@ def test_explore_filters_execute_in_database(graph):
     assert rows and all(any(w['baseId']==root for w in r['words']) for r in rows)
     assert graph.read(lambda t:explore(t,query='no such phrase anywhere'))==[]
 
-def test_new_token_promotion_preserves_other_area_and_advanced_statuses(graph):
+def test_new_token_promotion_preserves_advanced_statuses(graph):
     row=graph.read(lambda t:t.run('MATCH (w:Word)-[:BASE_FORM]->(b) RETURN w.id AS id,b.id AS base LIMIT 1'))[0]
     def set_(state,area='reading',only=False):return graph.write('test.tap',lambda t:set_status(t,row['id'],area,state,only_if_new=only),scalar_only=True)
-    set_('new');set_('familiar','listening')
+    set_('new')
     promoted=set_('learning',only=True);assert promoted['state']=='learning'
     detail=graph.read(lambda t:word_detail(t,row['id']))
-    assert detail['statuses']['listening']['state']=='familiar'
+    assert detail['statuses']['listening']['state']=='learning'
     assert detail['statuses']['reading']['state']=='learning'
     for advanced in ('familiar','known'):
         before=set_(advanced);after=set_('learning',only=True)

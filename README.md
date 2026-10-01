@@ -1,6 +1,6 @@
 # Kotoba Studio
 
-A local Japanese reading application with an OML ontology and a Neo4j knowledge graph. Import a lesson, tap words to see their base forms and meanings, select phrases by dragging, and practice the content of that lesson. Listening and Reading statuses are shared across a word's forms.
+A local Japanese reading application with an OML ontology and a Neo4j knowledge graph. Import a lesson, tap words to see their base forms and meanings, select phrases by dragging, and practice the content of that lesson. One Learning Status is shared across a word's forms.
 
 Ichiran supplies tokenization and dictionary meanings without custom segmentation rules. Imports make no language-model calls. Sentence translation and pronunciation are generated on demand; a local language model supplies a saved word meaning only when the dictionary has no entry. The reader supports adjustable type and spacing, mobile touch controls, and installation as a PWA. Writing journals, daily targets, points, and streaks are absent.
 
@@ -52,7 +52,7 @@ ollama pull qwen3.5:9b-mlx
 
 `start` builds and starts Neo4j, the API, the web server, the shared Ichiran dictionary service, and the native inference worker. The first Ichiran start downloads and verifies a dictionary snapshot and restores several gigabytes of PostgreSQL data; allow several minutes. Later starts reuse those files. Details and pinned versions are in [services/ichiran](services/ichiran/README.md).
 
-Open **http://127.0.0.1:3010** on the Mac. A fresh installation has an empty library. Use **Import text** to add Japanese content you supply. Clicking a New word promotes it to Learning in both areas. Completing a lesson previews the number of remaining New word families and marks them Known in both areas after confirmation. Practice is available within each lesson.
+Open **http://127.0.0.1:3010** on the Mac. A fresh installation has an empty library. Use **Import text** to add Japanese content you supply. Clicking a New word promotes it to Learning. Completing a lesson previews the number of remaining New word families and marks them Known after confirmation. Practice is available within each lesson for Learning and Familiar words.
 
 ## Mobile access and PWA installation
 

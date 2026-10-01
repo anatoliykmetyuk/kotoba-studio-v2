@@ -154,9 +154,7 @@
         "surface": 1,
         "meaning": 1
       },
-      "relations": {
-        "STATUS": 1
-      }
+      "relations": {}
     },
     "PhraseMember": {
       "abstract": false,
@@ -186,6 +184,7 @@
         "revision": 1,
         "createdAt": 1,
         "updatedAt": 1,
+        "area": 1,
         "state": 1
       },
       "relations": {}
@@ -508,7 +507,7 @@
       "to": [
         "LearningStatus"
       ],
-      "functional": true
+      "functional": false
     },
     "OCCURRED_IN": {
       "from": [
@@ -629,5 +628,5 @@
       ]
     ]
   },
-  "digest": "6ccb821a99c7dfd3c7044ac064967f74d840d79c4c5d0193c82100de5f5ce5ce"
+  "digest": "eeaf331f600543058fb4853da82a75bc95bb43e4b2d84e2c5d264fdd4d678f97"
 }

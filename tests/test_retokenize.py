@@ -22,8 +22,7 @@ def fixture():
         base=base or surface
         if base not in words:
             key='word:'+digest(base);id=str(uuid.uuid5(uuid.NAMESPACE_URL,key));words[base]=node('Word',key,surface=base,reading='',partOfSpeech='verb',family=id);edge(id,'BASE_FORM',id)
-            for area in ('reading','listening'):
-                s=node('LearningStatus',f'status:{id}:{area}',area=area,state='known');edge(id,'STATUS',s)
+            s=node('LearningStatus',f'status:{id}',state='known');edge(id,'STATUS',s)
         if surface not in words:
             words[surface]=node('Word','word:'+digest(surface),surface=surface,reading='',partOfSpeech='verb',family=words[base]);edge(words[surface],'BASE_FORM',words[base])
         return words[surface]

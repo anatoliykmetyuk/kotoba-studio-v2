@@ -17,12 +17,13 @@ test('mobile sheet, example destination, practice preparation, instant audio and
   const detail:TextItem=await (await request.get('/api/v1/texts/'+textId)).json();
   await page.locator(`[data-token-id="${detail.sentences[0].tokens[0].id}"]`).tap();
   const panel=page.getByLabel('Word details',{exact:true});await expect(panel).toBeVisible();
-  expect((await panel.locator('.area-control label').allTextContents()).map(s=>s.trim())).toEqual(['Listening','Reading']);
+  await expect(panel.getByRole('group',{name:'Learning Status'})).toHaveCount(1);
   await expect(panel.locator('.word-meanings li').first()).toBeVisible();
   await panel.getByRole('button',{name:'Close word details'}).click();await expect(panel).toHaveCount(0);
   await page.locator(`[data-token-id="${detail.sentences[0].tokens[0].id}"]`).tap();
   await panel.locator('.example-link').filter({hasText:detail.title}).first().click();await expect(panel).toHaveCount(0);await expect(page.locator('.example-highlight')).toBeVisible();await expect(page.locator('.example-highlight')).toHaveCount(0,{timeout:5000});
-  await page.locator('.reader-finish').getByRole('button',{name:'Practice',exact:true}).click();await page.getByLabel('Include all statuses').check();
+  for(const base of new Set(detail.sentences.flatMap(s=>s.tokens.map(w=>w.baseId))))await request.put('/api/v1/words/'+base+'/status',{data:{state:'learning'}});
+  await page.locator('.reader-finish').getByRole('button',{name:'Practice',exact:true}).click();await expect(page.getByLabel('Include all statuses')).toHaveCount(0);
   await expect(page.locator('.answer-grid button').first()).toBeVisible();
   const pool=(await (await request.get('/api/v1/practice?'+new URLSearchParams({textId,states:'new,learning,familiar,known'}))).json()).words;
   const orders=[];

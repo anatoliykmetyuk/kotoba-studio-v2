@@ -9,7 +9,7 @@ from api.language import meanings,sentences,kanji
 from api.domain import finalize_import,create_statuses,family,word_form
 from api.vocabulary import eligible_tokens,latin_word
 
-PLAN_VERSION=4
+PLAN_VERSION=5
 
 class Memory:
  def new_id(self,key):return str(uuid.uuid5(uuid.NAMESPACE_URL,'https://kotoba.local/migration/'+key))
@@ -53,7 +53,8 @@ def migrate(source:Path,output:Path,legacy_python:Path):
   choice={'base':lemma,'baseReading':old['reading'] if old and old['reading'] else token['baseReading'],'meaning':meaning,'sense':'legacy:'+digest(lemma),'sourceType':'legacy'}
   base=family(m,token,choice);bases[lemma]=base
   if old:
-   for area,state in states(lemma,old['state']).items():m.update(m.find(f'status:{base["id"]}:{area}')['id'],state=max((state,m.find(f'status:{base["id"]}:{area}')['state']),key=['new','learning','familiar','known'].index),updatedAt=old['updated_at'])
+   status=m.find(f'status:{base["id"]}');state=min(states(lemma,old['state']).values(),key=['new','learning','familiar','known'].index)
+   m.update(status['id'],state=max((state,status['state']),key=['new','learning','familiar','known'].index),updatedAt=old['updated_at'])
   return base
  for old,tokens in zip(texts,token_lists):
   parsed=sentences(old['body'])

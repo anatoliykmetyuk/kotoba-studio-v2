@@ -74,6 +74,7 @@ def test_agent_folder_rename_and_filing_are_separate_from_import(client):
  assert client.post('/api/v1/imports',json=payload).json()['textId']==text_id
  saved=next(t for t in client.get('/api/v1/texts').json() if t['id']==text_id)
  assert [f['name'] for f in saved['folders']]==['Renamed']
+ assert [f['id'] for f in client.get('/api/v1/texts/'+text_id).json()['folders']]==[folder['id']]
  assert transaction(rename,{'old':'Renamed','new':'Renamed again'}).status_code==200
  saved=next(t for t in client.get('/api/v1/texts').json() if t['id']==text_id)
  assert [f['name'] for f in saved['folders']]==['Renamed again']
@@ -271,41 +272,37 @@ def test_phrase_native_playback_waits_then_redirects_without_caching(client,monk
  assert client.get('/api/v1/phrase-tools/speech/play',params={'text':'猫'}).status_code==422
 
 
-def test_learn_promotes_both_areas_atomically_and_preserves_advanced_states(client,monkeypatch):
- from api import domain
+def test_learn_uses_one_status_atomically_and_preserves_advanced_states(client,monkeypatch):
  from api.graph import Tx
  from concurrent.futures import ThreadPoolExecutor
  headers={'Authorization':'Bearer api-test-worker'}
  imported=client.post('/api/v1/imports',json={'title':'Learning fixture','body':'猫を見る。'}).json()
  claimed=client.post('/api/v1/worker/claim',headers=headers).json()['job'];assert claimed['id']==imported['jobId']
- # This is the actual local dictionary importer, with no inference call.
  from worker.main import annotate
  result=client.post('/api/v1/worker/'+claimed['id']+'/complete',headers=headers,json={'attempt':claimed['attempts'],'result':annotate({'body':'猫を見る。'})}).json()
- text=client.get('/api/v1/texts/'+result['textId']).json();token=text['sentences'][0]['tokens'][0];id=token['wordId']
- original_snapshot=Tx.snapshot
- def no_snapshot(*_):raise AssertionError('Learning must not scan or audit the whole graph')
+ token=client.get('/api/v1/texts/'+result['textId']).json()['sentences'][0]['tokens'][0];id=token['wordId']
+ def no_snapshot(*_):raise AssertionError('Learning must not scan the whole graph')
  monkeypatch.setattr(Tx,'snapshot',no_snapshot)
  with ThreadPoolExecutor(max_workers=4) as pool:
   responses=list(pool.map(lambda _:client.post('/api/v1/words/'+id+'/learn'),range(4)))
  assert all(r.status_code==200 for r in responses)
  assert all(r.json()==responses[0].json() for r in responses)
- assert responses[0].json()=={'baseId':token['baseId'],'statuses':{'listening':{'state':'learning','revision':1},'reading':{'state':'learning','revision':1}}}
- for area,state in [('listening','known'),('reading','familiar')]:
-  assert client.put('/api/v1/words/'+id+'/status',json={'area':area,'state':state}).status_code==200
- promoted=client.post('/api/v1/words/'+id+'/learn').json()
- assert promoted['statuses']=={'listening':{'state':'known','revision':2},'reading':{'state':'familiar','revision':2}}
- for area in ['listening','reading']:client.put('/api/v1/words/'+id+'/status',json={'area':area,'state':'new'})
+ assert responses[0].json()['status']=={'state':'learning','revision':1}
+ for state in ('familiar','known'):
+  saved=client.put('/api/v1/words/'+id+'/status',json={'state':state}).json()
+  assert client.post('/api/v1/words/'+id+'/learn').json()['status']=={k:saved[k] for k in ('state','revision')}
+ # Installed clients still send area. Both aliases address the same revision.
+ before=client.put('/api/v1/words/'+id+'/status',json={'area':'reading','state':'new'}).json()
+ assert client.put('/api/v1/words/'+id+'/status',json={'area':'listening','state':'familiar','revision':before['revision']}).status_code==200
+ assert client.put('/api/v1/words/'+id+'/status',json={'state':'known','revision':before['revision']}).status_code==409
+ client.put('/api/v1/words/'+id+'/status',json={'state':'new'})
  update=Tx.update
- def fail_second(t,node_id,**props):
-  node=t.get(node_id)
-  if node['type']=='LearningStatus' and node['area']=='reading':raise ValueError('Forced second-area failure')
+ def fail(t,node_id,**props):
+  if t.get(node_id)['type']=='LearningStatus':raise ValueError('Forced status failure')
   return update(t,node_id,**props)
- monkeypatch.setattr(Tx,'update',fail_second)
+ monkeypatch.setattr(Tx,'update',fail)
  assert client.post('/api/v1/words/'+id+'/learn').status_code==422
- statuses=client.get('/api/v1/words/'+id).json()['statuses']
- assert statuses['listening']['state']==statuses['reading']['state']=='new'
- assert statuses['listening']['revision']==statuses['reading']['revision']==3
- monkeypatch.setattr(Tx,'update',update);monkeypatch.setattr(Tx,'snapshot',original_snapshot)
+ assert client.get('/api/v1/words/'+id).json()['status']['state']=='new'
 
 
 def test_word_meanings_preserve_numeric_dictionary_sense_order(client):

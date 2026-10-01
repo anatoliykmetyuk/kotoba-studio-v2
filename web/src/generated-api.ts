@@ -833,9 +833,10 @@ export interface components {
             ids: string[];
             /**
              * Area
-             * @enum {string}
+             * @deprecated
+             * @description Ignored. Learning status is unified.
              */
-            area: "reading" | "listening";
+            area?: ("reading" | "listening") | null;
             /**
              * State
              * @enum {string}
@@ -952,6 +953,11 @@ export interface components {
         LearnResult: {
             /** Baseid */
             baseId: string;
+            status: components["schemas"]["LearningState"];
+            /**
+             * @deprecated
+             * @description Compatibility aliases of the single status.
+             */
             statuses: components["schemas"]["LearningAreas"];
         };
         /** LearningAreas */
@@ -1093,9 +1099,10 @@ export interface components {
         Status: {
             /**
              * Area
-             * @enum {string}
+             * @deprecated
+             * @description Ignored. Learning status is unified.
              */
-            area: "reading" | "listening";
+            area?: ("reading" | "listening") | null;
             /**
              * State
              * @enum {string}
@@ -1756,7 +1763,7 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string;
-                area?: string;
+                area?: ("reading" | "listening") | null;
                 minimum?: number;
                 seen?: string;
                 wordId?: string | null;
@@ -2327,7 +2334,7 @@ export interface operations {
         parameters: {
             query: {
                 textId: string;
-                area?: "reading" | "listening";
+                area?: ("reading" | "listening") | null;
                 states?: string;
             };
             header?: never;

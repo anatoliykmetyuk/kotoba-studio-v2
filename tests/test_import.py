@@ -57,12 +57,16 @@ def test_spelling_migration_unions_families_preserves_meanings_and_statuses():
  m=Memory();m.create('Schema','schema:active',digest=SCHEMA['digest'],version=SCHEMA['version'])
  for id,surface,base,gloss in [('a','行く','a','go'),('b','逝く','b','die'),('c','いった','a','went'),('d','いった','b','passed away')]:
   m.create('Word','old:'+id,id=id,surface=surface,reading='いく',meaning=gloss,partOfSpeech='動詞',family=base);m.link(id,'BASE_FORM',base)
- create_statuses(m,'a',{'reading':'known','listening':'new'});create_statuses(m,'b',{'reading':'new','listening':'familiar'})
+ for owner,states in [('a',{'reading':'known','listening':'new'}),('b',{'reading':'new','listening':'familiar'})]:
+  for area,state in states.items():
+   status=m.create('LearningStatus',f'status:{owner}:{area}',area=area,state=state);m.link(owner,'STATUS',status['id'])
  before=m.snapshot();after,report=migrate(before)
+ from cli.learning_status import migrate as unify
+ after,_=unify(after)
  assert report['mergedWords']==1 and validate_graph(after)['valid']
  assert len([n for n in after['nodes'] if 'Word' in n['labels']])==3
  assert {n['properties']['body'] for n in after['nodes'] if 'Meaning' in n['labels']}=={'go','die','went','passed away'}
- states={n['properties']['area']:n['properties']['state'] for n in after['nodes'] if 'LearningStatus' in n['labels']}
- assert states=={'reading':'known','listening':'familiar'}
+ statuses=[n['properties'] for n in after['nodes'] if 'LearningStatus' in n['labels']]
+ assert len(statuses)==1 and statuses[0]['state']=='familiar'
  assert migrate(after)[0]==after
  assert before==m.snapshot()

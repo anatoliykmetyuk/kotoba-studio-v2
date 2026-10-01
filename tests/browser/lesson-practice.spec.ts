@@ -9,11 +9,12 @@ async function importLesson(request:APIRequestContext,title:string,body:string):
  const submitted=await response.json();let textId=submitted.textId;
  if(!textId)await expect.poll(async()=>{const job=await (await request.get('/api/v1/jobs/'+submitted.jobId)).json();expect(job.state,job.error).not.toBe('failed');textId=job.result.textId;return job.state},{timeout:120_000}).toBe('ready');
  const text=await (await request.get('/api/v1/texts/'+textId)).json();
+ for(const id of new Set<string>(text.sentences.flatMap((s:any)=>s.tokens.map((t:any)=>t.baseId))))expect((await request.put('/api/v1/words/'+id+'/status',{data:{state:'learning'}})).ok()).toBeTruthy();
  expect((await request.patch('/api/v1/texts/'+textId,{data:{archived:false}})).ok()).toBeTruthy();
  return text;
 }
 async function practicePool(request:APIRequestContext,textId:string){
- const response=await request.get('/api/v1/practice?'+new URLSearchParams({textId,states:'new,learning,familiar,known'}));
+ const response=await request.get('/api/v1/practice?'+new URLSearchParams({textId}));
  expect(response.ok()).toBeTruthy();return response.json() as Promise<{words:Example['words'];sentences:Example[]}>;
 }
 async function enterPractice(page:Page,text:TextItem){
@@ -22,7 +23,7 @@ async function enterPractice(page:Page,text:TextItem){
  await expect(page.locator('.practice-page')).toHaveAttribute('data-text-id',text.id);
  await expect(page.locator('.practice-page .page-heading')).toContainText(text.title);
  await expect(page).toHaveURL(new RegExp('#'+text.id+'\\?mode=practice$'));
- await page.getByLabel('Include all statuses').check();
+ await expect(page.getByLabel('Include all statuses')).toHaveCount(0);
 }
 
 test('finish a lesson and practice only its words, distractors and prepared sentences',async({page,request},info)=>{
@@ -53,9 +54,10 @@ test('finish a lesson and practice only its words, distractors and prepared sent
  await expect(page.getByRole('button',{name:'Mark as New',exact:true})).toBeVisible();
  const completed=await (await request.get('/api/v1/texts/'+first.id)).json() as TextItem;
  expect(completed.textState).toBe('completed');
+ for(const id of lessonBases)expect((await request.put('/api/v1/words/'+id+'/status',{data:{state:'familiar'}})).ok()).toBeTruthy();
  await page.locator('.reader-finish').getByRole('button',{name:'Practice',exact:true}).click();
  await expect(page.locator('.practice-page')).toHaveAttribute('data-text-id',first.id);
- await page.getByLabel('Include all statuses').check();
+ await expect(page.getByLabel('Include all statuses')).toHaveCount(0);
  for(let round=0;round<3;round++){
   await expect(page.locator('.answer-grid button').first()).toBeVisible();
   const challenge=await page.locator('[data-challenge]').getAttribute('data-challenge');

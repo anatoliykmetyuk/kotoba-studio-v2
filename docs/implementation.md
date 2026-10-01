@@ -15,15 +15,18 @@ Bounded scalar changes validate affected entities without scanning the corpus.
 
 A Word has a stable UUID and unique exact spelling. Meanings are separate nodes
 with source provenance, including multiple dictionary alternatives. Every Word
-links to a canonical base Word, which links to itself. Listening and Reading
-statuses belong to that base and are shared by all its forms. Sentence text
+links to a canonical base Word, which links to itself. One Learning Status
+belongs to that base and is shared by all its forms. Migrate existing Listening
+and Reading statuses by taking the lower of New, Learning, Familiar and Known. Sentence text
 deduplicates; per-Text placements and token occurrences retain original offsets.
 Identical content and identities deduplicate. Texts independently track New or
 Completed and their furthest reading position.
 
 Folder names are unique and editable in place through graph queries. Lesson
-ingestion does not create folders or assign membership. New imports appear
-unfiled in All texts; agents attach them to folders in a separate graph transaction.
+ingestion does not create folders or assign membership. Imports save
+unfiled in All texts; agents and the UI folder selector attach them afterward
+in a separate graph transaction. Folder selection lists existing folders only,
+including empty folders.
 Filing failure must not undo the imported lesson. Duplicate folder names fail
 import preflight before any lesson work. The broader ontology refactor is deferred.
 Library order is creation time, newest first; reading and organization edits do
@@ -61,8 +64,7 @@ monotonic furthest-read progress. Explicit offline progress queues until the
 server acknowledges it.
 
 A word tap opens its canonical base, automatically pronounces it, and promotes
-New to Learning in both areas without downgrading Familiar or Known. Listening
-precedes Reading. Show the first three dictionary meanings with an expansion
+New to Learning without downgrading Familiar or Known. Show the first three dictionary meanings with an expansion
 control. New, Learning and Familiar have distinct highlights; Known and Latin
 text are unhighlighted. Latin text has no ordinary click action.
 
@@ -86,15 +88,16 @@ Every visible label is factual and functional.
 
 ## Completion and lesson practice
 
-Completion previews the count of unique base families with New in either area.
+Completion previews the count of unique base families with New learning status.
 The UI confirms against a graph-state fingerprint, marking those families Known
-in both areas in the same transaction as lesson completion. Families without New
+in the same transaction as lesson completion. Families without New
 remain unchanged. Reopening is status-neutral. Already completed lessons can
 explicitly mark remaining New words Known; deployment never does so implicitly.
 
 Practice is entered within a lesson, with questions and distractors from that
-Text only. Answer APIs validate membership. All statuses are included by default
-so completed lessons remain practiceable. Matching shuffles answers and
+Text only. Answer APIs validate membership. Practice includes Learning and Familiar words by default. New and Known words
+are excluded from its questions; there is no Include all statuses control.
+Sentence reconstruction retains every token in an eligible sentence. Matching shuffles answers and
 alternatives every challenge. Correct feedback advances automatically. Sentence
 reconstruction displays its tokens and controls immediately, with a placeholder
 while its English translation generates. Audio is lazy on click, and token

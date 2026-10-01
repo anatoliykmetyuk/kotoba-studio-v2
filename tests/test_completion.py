@@ -7,12 +7,12 @@ from api.vocabulary_cleanup import fingerprint
 
 
 def statuses(client,id,listening,reading):
-    for area,state in [('listening',listening),('reading',reading)]:
-        response=client.put('/api/v1/words/'+id+'/status',json={'area':area,'state':state})
-        assert response.status_code==200,response.text
+    state=min((listening,reading),key=('new','learning','familiar','known').index)
+    response=client.put('/api/v1/words/'+id+'/status',json={'state':state})
+    assert response.status_code==200,response.text
 
 
-def test_completion_counts_unique_families_and_promotes_both_areas(client):
+def test_completion_counts_unique_families_and_promotes_new_status(client):
     text=import_lesson(client,'Completion fixture',[[('食べた','たべた','eat','食べる'),('猫','ねこ','cat')],[('食べる','たべる','eat'),('犬','いぬ','dog')]])
     client.put('/api/v1/texts/'+text['id']+'/status',json={'state':'new'})
     words={w['base']:w['baseId'] for s in text['sentences'] for w in s['tokens']}
@@ -25,7 +25,7 @@ def test_completion_counts_unique_families_and_promotes_both_areas(client):
         word=client.get('/api/v1/words/'+words[base]).json()
         assert {s['state'] for s in word['statuses'].values()}=={'known'}
     dog=client.get('/api/v1/words/'+words['犬']).json()
-    assert {a:s['state'] for a,s in dog['statuses'].items()}=={'listening':'learning','reading':'familiar'}
+    assert {a:s['state'] for a,s in dog['statuses'].items()}=={'listening':'learning','reading':'learning'}
     client.put('/api/v1/texts/'+text['id']+'/status',json={'state':'new'})
     assert client.get('/api/v1/words/'+words['猫']).json()['statuses']['reading']['state']=='known'
 

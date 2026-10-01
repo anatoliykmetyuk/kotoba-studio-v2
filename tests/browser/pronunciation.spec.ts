@@ -31,7 +31,7 @@ test('word taps promote only New, play audible media, replay, and leave no selec
  const unique=[...new Map(text.sentences.flatMap(s=>s.tokens).map(t=>[t.baseId,t])).values()];
  const [first,second,third]=unique;
  async function status(token:Token,area:string,state:string){expect((await request.put('/api/v1/words/'+token.wordId+'/status',{data:{area,state}})).ok()).toBeTruthy()}
- await status(first,'reading','new');await status(first,'listening','familiar');await status(second,'reading','familiar');await status(third,'reading','known');
+ await status(first,'reading','new');await status(second,'reading','familiar');await status(third,'reading','known');
  await page.addInitScript(()=>{window.pronunciations=[];document.addEventListener('ended',event=>{const audio=event.target;if(audio instanceof HTMLAudioElement)window.pronunciations.push({src:audio.currentSrc,time:audio.currentTime,duration:audio.duration,muted:audio.muted,volume:audio.volume})},true)});
  await page.goto('/');await expect(page.getByRole('heading',{name:'Library',exact:true})).toBeVisible();await page.locator('.text-card').filter({has:page.getByRole('heading',{name:text.title,exact:true})}).click();
  const token=(t:Token)=>page.locator(`[data-token-id="${t.id}"]`);
@@ -41,8 +41,8 @@ test('word taps promote only New, play audible media, replay, and leave no selec
  expect(new Set([newColor,familiarColor,knownColor]).size).toBe(3);expect(newColor).not.toBe('rgba(0, 0, 0, 0)');expect(familiarColor).not.toBe('rgba(0, 0, 0, 0)');
  await token(first).tap();
  const panel=page.getByLabel('Word details',{exact:true});
- await expect(panel.getByRole('group',{name:'reading status'}).getByRole('button',{name:'Learning',exact:true})).toHaveAttribute('aria-pressed','true');
- await expect(panel.getByRole('group',{name:'listening status'}).getByRole('button',{name:'Familiar',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(panel.getByRole('group',{name:'Learning Status'}).getByRole('button',{name:'Learning',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(panel.getByRole('group',{name:'Learning Status'})).toHaveCount(1);
  try{await expect.poll(()=>page.evaluate(()=>window.pronunciations.length),{timeout:90_000}).toBe(1)}catch(error){await info.attach('media-state',{body:JSON.stringify(await page.locator('audio').evaluate((audio:HTMLAudioElement)=>({src:audio.currentSrc,paused:audio.paused,ended:audio.ended,error:audio.error?.message,readyState:audio.readyState,time:audio.currentTime,duration:audio.duration,visibility:document.visibilityState}))),contentType:'application/json'});throw error}
  const actual=await page.evaluate(()=>window.pronunciations[0]);expect(actual.time).toBeGreaterThan(.1);expect(actual.duration).toBeGreaterThan(.1);expect(actual.muted).toBe(false);expect(actual.volume).toBe(1);
  const wav=Buffer.from(await page.evaluate(async src=>{const response=await fetch(src);if(!response.ok)throw new Error('Pronunciation bytes could not load');return Array.from(new Uint8Array(await response.arrayBuffer()))},actual.src));expect(wav.toString('ascii',0,4)).toBe('RIFF');let peak=0;for(let offset=12;offset+8<wav.length;){const size=wav.readUInt32LE(offset+4);if(wav.toString('ascii',offset,offset+4)==='data'){for(let i=offset+8;i+1<Math.min(offset+8+size,wav.length);i+=2)peak=Math.max(peak,Math.abs(wav.readInt16LE(i)));break}offset+=8+size+(size%2)}expect(peak,'Generated pronunciation must contain an audio signal').toBeGreaterThan(256);
@@ -52,7 +52,7 @@ test('word taps promote only New, play audible media, replay, and leave no selec
  await panel.getByRole('button',{name:'Pronounce word'}).click();await panel.getByRole('button',{name:'Close word details',exact:true}).click();await token(second).tap();
  await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>new URL(a.src).searchParams.get('text'))).toBe(second.base);
  await expect.poll(()=>page.evaluate(id=>window.pronunciations.some(p=>new URL(p.src).searchParams.get('text')===id),second.base),{timeout:90_000}).toBe(true);
- await expect(panel.getByRole('group',{name:'reading status'}).getByRole('button',{name:'Familiar',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(panel.getByRole('group',{name:'Learning Status'}).getByRole('button',{name:'Familiar',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(page.getByRole('alert')).toHaveCount(0);await panel.getByRole('button',{name:'Close word details',exact:true}).click();
  await page.screenshot({path:`test-results/${info.project.name}-token-highlights.png`});
  await token(second).tap();await page.goBack();await expect(page.getByRole('heading',{name:'Library',exact:true})).toBeVisible();await expect.poll(()=>page.locator('audio').evaluate(el=>(el as HTMLAudioElement).paused)).toBe(true);await page.goForward();await expect(token(first)).toBeAttached();
@@ -62,20 +62,18 @@ test('word taps promote only New, play audible media, replay, and leave no selec
  await longPressToken(page,browserName,token(first));
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('.range-selected')).toHaveCount(0);await expect(page.locator('audio')).not.toHaveAttribute('src',/.+/);await expect(page.locator('audio')).toHaveJSProperty('paused',true);expect(await page.evaluate(()=>window.pronunciations)).toEqual([]);
  const saved=await (await request.get('/api/v1/words/'+first.wordId)).json();expect(saved.statuses).toEqual(beforeHold.statuses);expect(saved.statuses.reading.state).toBe('new');expect(holdRequests).toEqual([]);page.off('request',recordHoldRequest);
- const beforeFinal=await page.evaluate(()=>window.pronunciations.length);await token(first).tap();await panel.getByRole('group',{name:'reading status'}).getByRole('button',{name:'Known',exact:true}).click();await expect(panel.getByRole('group',{name:'reading status'}).getByRole('button',{name:'Known',exact:true})).toHaveAttribute('aria-pressed','true');await expect(page.getByRole('alert')).toHaveCount(0);
+ const beforeFinal=await page.evaluate(()=>window.pronunciations.length);await token(first).tap();await panel.getByRole('group',{name:'Learning Status'}).getByRole('button',{name:'Known',exact:true}).click();await expect(panel.getByRole('group',{name:'Learning Status'}).getByRole('button',{name:'Known',exact:true})).toHaveAttribute('aria-pressed','true');await expect(page.getByRole('alert')).toHaveCount(0);
  await expect.poll(()=>page.evaluate(()=>window.pronunciations.length),{timeout:30_000}).toBe(beforeFinal+1);
  await panel.getByRole('button',{name:'Close word details',exact:true}).click();await page.locator('.reader .back-button').click();
  await expect(page.locator('audio')).toHaveJSProperty('paused',true);
 });
 
-test('automatic learning preserves known reading while promoting new listening',async({page,request},info)=>{
+test('automatic learning preserves Known status',async({page,request},info)=>{
  test.skip(info.project.name!=='phone-chromium-portrait','Shared status behavior is also covered by domain tests.');
  const text=await pronunciationLesson(request);const first=text.sentences.flatMap(s=>s.tokens)[0];
- await request.put('/api/v1/words/'+first.wordId+'/status',{data:{area:'reading',state:'known'}});await request.put('/api/v1/words/'+first.wordId+'/status',{data:{area:'listening',state:'new'}});await request.patch('/api/v1/settings',{data:{area:'listening'}});
+ await request.put('/api/v1/words/'+first.wordId+'/status',{data:{state:'known'}});
  await page.goto('/#'+text.id);await page.locator(`[data-token-id="${first.id}"]`).tap();
- await expect(page.getByRole('group',{name:'listening status'}).getByRole('button',{name:'Learning',exact:true})).toHaveAttribute('aria-pressed','true');
- await expect(page.getByRole('group',{name:'reading status'}).getByRole('button',{name:'Known',exact:true})).toHaveAttribute('aria-pressed','true');
- await request.patch('/api/v1/settings',{data:{area:'reading'}});
+ await expect(page.getByRole('group',{name:'Learning Status'}).getByRole('button',{name:'Known',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.ended),{timeout:90_000}).toBe(true);
  await page.getByRole('button',{name:'Close word details',exact:true}).click();
  await page.locator('.reader .back-button').click();

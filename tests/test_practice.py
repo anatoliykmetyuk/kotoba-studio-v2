@@ -99,15 +99,15 @@ def test_candidates_distractors_and_statuses_stay_in_lesson(client,lessons,monke
     assert {w['baseId'] for w in pool['words']}.isdisjoint(w['baseId'] for w in other['words'])
     assert {s['textId'] for s in pool['sentences']}=={a['id']}
     assert {s['occurrenceId'] for s in pool['sentences']}=={s['id'] for s in a['sentences']}
-    assert client.get('/api/v1/practice',params={'textId':a['id']}).json()==pool
+    assert client.get('/api/v1/practice',params={'textId':a['id']}).json()=={'words':[],'sentences':[]}
     cat=a['sentences'][0]['tokens'][0];fish=a['sentences'][0]['tokens'][1]
     for token,area,state in ((cat,'reading','learning'),(fish,'listening','familiar')):
         assert client.put('/api/v1/words/'+token['baseId']+'/status',json={'area':area,'state':state}).status_code==200
     reading=practice(client,a,states='learning,familiar');listening=practice(client,a,area='listening',states='learning,familiar')
-    assert {w['baseId'] for w in reading['words']}=={cat['baseId']}
+    assert {w['baseId'] for w in reading['words']}=={cat['baseId'],fish['baseId']}
     assert {s['occurrenceId'] for s in reading['sentences']}=={a['sentences'][0]['id'],a['sentences'][2]['id']}
-    assert {w['baseId'] for w in listening['words']}=={fish['baseId']}
-    assert {s['occurrenceId'] for s in listening['sentences']}=={a['sentences'][0]['id']}
+    assert {w['baseId'] for w in listening['words']}=={cat['baseId'],fish['baseId']}
+    assert listening==reading
     assert len(listening['sentences'][0]['words'])==2,'Reconstruction keeps all tokens in an eligible sentence'
 
 
@@ -204,3 +204,15 @@ def test_practice_prefers_canonical_meaning_over_an_inflected_forms_alternative(
     token=text['sentences'][0]['tokens'][0]
     assert len(client.get('/api/v1/words/'+token['wordId']).json()['meanings'])==2
     assert client.get('/api/v1/words/'+token['baseId']).json()['meanings'][0]['body']=='canonical meaning'
+
+
+def test_default_practice_includes_only_learning_and_familiar(client):
+    text=import_lesson(client,'Default practice status selection',[[('練習新','れんしゅうしん','new')],[('練習中','れんしゅうちゅう','learning')],[('練習慣','れんしゅうかん','familiar')],[('練習既','れんしゅうき','known')]])
+    for sentence,state in zip(text['sentences'],('new','learning','familiar','known')):
+        token=sentence['tokens'][0]
+        assert client.put('/api/v1/words/'+token['baseId']+'/status',json={'state':state}).status_code==200
+    response=client.get('/api/v1/practice',params={'textId':text['id']})
+    assert response.status_code==200,response.text
+    pool=response.json()
+    assert {w['state'] for w in pool['words']}=={'learning','familiar'}
+    assert {s['sentenceId'] for s in pool['sentences']}=={s['sentenceId'] for s in text['sentences'][1:3]}

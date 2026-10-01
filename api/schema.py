@@ -49,10 +49,13 @@ def validate_graph(snapshot, schema=SCHEMA):
             if outgoing[base]['BASE_FORM']!=[base] or p['family']!=bp['family'] or bp['family']!=base: raise InvalidGraph('Base form must be a canonical self-linked family root')
             status=outgoing[id]['STATUS']
             if id==base:
-                if Counter(nodes[x][1]['area'] for x in status)!=Counter(['reading','listening']): raise InvalidGraph('Canonical Word requires both learning areas')
+                if 'area' in schema['classes']['LearningStatus']['required']:
+                    if Counter(nodes[x][1]['area'] for x in status)!=Counter(['reading','listening']): raise InvalidGraph('Canonical Word requires both legacy learning areas')
+                elif len(status)!=1:raise InvalidGraph('Canonical Word requires one learning status')
             elif status: raise InvalidGraph('Forms inherit status from their base')
         if kind=='Phrase':
-            if Counter(nodes[x][1]['area'] for x in outgoing[id]['STATUS'])!=Counter(['reading','listening']):raise InvalidGraph('Phrase requires both learning areas')
+            if 'area' in schema['classes']['LearningStatus']['required']:
+                if Counter(nodes[x][1]['area'] for x in outgoing[id]['STATUS'])!=Counter(['reading','listening']):raise InvalidGraph('Phrase requires both legacy learning areas')
             members=outgoing[id]['PHRASE_MEMBER']
             if len(members)<2:raise InvalidGraph('Phrase requires at least two ordered words')
             if sorted(nodes[x][1]['ordinal'] for x in members)!=list(range(len(members))):raise InvalidGraph('Phrase member ordinals must be contiguous')
@@ -73,7 +76,7 @@ def validate_graph(snapshot, schema=SCHEMA):
     forms=set(); sentences=set(); texts=set()
     for w in by_type['Word']:
         key=w['surface']
-        if key in forms: raise InvalidGraph('Duplicate Word spelling')
+        if key in forms and ['surface'] in schema['keys'].get('Word',[]): raise InvalidGraph('Duplicate Word spelling')
         forms.add(key)
     for kind,seen in [('Sentence',sentences),('Text',texts)]:
         for p in by_type[kind]:

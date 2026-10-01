@@ -13,6 +13,8 @@ async function openSentence(page:Page,request:APIRequestContext){
  const response=await request.post('/api/v1/imports',{data:{title:'Sentence reordering acceptance',body:'今日は友達と一緒に近くの図書館で面白い日本語の本をゆっくり読みます。',folder:'Acceptance'}});
  expect(response.ok()).toBe(true);const submitted=await response.json();let id=submitted.textId;
  if(!id)await expect.poll(async()=>{const job=await(await request.get('/api/v1/jobs/'+submitted.jobId)).json();expect(job.state,job.error).not.toBe('failed');id=job.result.textId;return job.state},{timeout:90_000}).toBe('ready');
+ const text=await(await request.get('/api/v1/texts/'+id)).json();
+ for(const base of new Set<string>(text.sentences.flatMap((s:any)=>s.tokens.map((t:any)=>t.baseId))))expect((await request.put('/api/v1/words/'+base+'/status',{data:{state:'learning'}})).ok()).toBeTruthy();
  await page.goto('/#'+id);await expect(page.locator('.reader')).toBeVisible();
  await page.locator('.reader-finish').getByRole('button',{name:'Practice',exact:true}).click();
  await page.getByRole('button',{name:'Build a sentence',exact:true}).click();
