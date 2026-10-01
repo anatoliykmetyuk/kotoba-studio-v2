@@ -10,7 +10,7 @@ await mkdir(path.join(root,'.runtime'),{recursive:true});
 const output=await mkdtemp(path.join(root,'.runtime/filing-tests-'));
 const source=await readFile(path.join(root,'web/src/import-filing-store.ts'),'utf8');
 await writeFile(path.join(output,'store.mjs'),ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText);
-const {createFilingStore,legacyFilingKey,filingEntryPrefix}=await import(pathToFileURL(path.join(output,'store.mjs')));
+const {createFilingStore,legacyFilingKey,filingEntryPrefix,filingTerminalPrefix}=await import(pathToFileURL(path.join(output,'store.mjs')));
 after(()=>rm(output,{recursive:true,force:true}));
 
 class BrowserStorage{
@@ -85,4 +85,47 @@ test('malformed and mismatched entries are ignored without changing unrelated st
  const storage=new BrowserStorage();storage.setItem('other-feature','retained');storage.setItem(filingEntryPrefix+'invalid','{');
  storage.setItem(filingEntryPrefix+'wrong-id',JSON.stringify(filing('different-id')));storage.setItem(filingEntryPrefix+'bad',JSON.stringify({id:'bad',folder:{id:'folder',name:'folder'},jobId:42}));
  assert.deepEqual(ids(createFilingStore(storage)),[]);assert.equal(storage.getItem('other-feature'),'retained');
+});
+
+test('a stale tab cannot resurrect an entry completed or dismissed before its removal event',()=>{
+ const storage=new BrowserStorage(),saved={...filing('first'),textId:'saved-first'};
+ storage.setItem(filingEntryPrefix+saved.id,JSON.stringify(saved));
+ const first=createFilingStore(storage),stale=createFilingStore(storage);
+ first.update(current=>current.filter(item=>item.id!==saved.id));
+ stale.update(current=>current.map(item=>({...item,error:'Offline'})));
+ assert.deepEqual(ids(stale),[]);assert.deepEqual(ids(createFilingStore(storage)),[]);
+ assert.equal(storage.getItem(filingTerminalPrefix+saved.id),'1');assert.equal(storage.getItem(filingEntryPrefix+saved.id),null);
+});
+
+test('terminal state dominates a stale entry write interleaved with its completion',()=>{
+ const storage=new BrowserStorage(),saved={...filing('first'),textId:'saved-first'};
+ storage.setItem(filingEntryPrefix+saved.id,JSON.stringify(saved));
+ const first=createFilingStore(storage),stale=createFilingStore(storage),write=storage.setItem.bind(storage);
+ let completing=false;
+ storage.setItem=(key,value)=>{
+  if(key===filingEntryPrefix+saved.id&&!completing){completing=true;first.update(current=>current.filter(item=>item.id!==saved.id))}
+  write(key,value);
+ };
+ stale.update(current=>current.map(item=>({...item,error:'Offline'})));
+ assert.deepEqual(ids(stale),[]);assert.deepEqual(ids(createFilingStore(storage)),[]);
+});
+
+test('recovered quota cannot resurrect a completed request from a partially migrated legacy queue',()=>{
+ const storage=new BrowserStorage(),saved={...filing('first'),textId:'saved-first'};
+ storage.setItem(legacyFilingKey,JSON.stringify([saved,filing('second')]));storage.quota=true;
+ const store=createFilingStore(storage);assert.notEqual(storage.getItem(legacyFilingKey),null);
+ storage.quota=false;store.update(current=>current.filter(item=>item.id!==saved.id));
+ const restored=createFilingStore(storage);assert.deepEqual(ids(restored),['second']);assert.equal(storage.getItem(legacyFilingKey),null);
+ assert.equal(storage.getItem(filingTerminalPrefix+saved.id),'1');
+});
+
+test('unsaved terminal records survive quota failures and storage events and persist after recovery',()=>{
+ const storage=new BrowserStorage(),saved={...filing('first'),textId:'saved-first'};
+ storage.setItem(legacyFilingKey,JSON.stringify([saved]));storage.quota=true;
+ const store=createFilingStore(storage);store.update(current=>current.filter(item=>item.id!==saved.id));
+ storage.values.set(filingEntryPrefix+saved.id,JSON.stringify({...saved,error:'Stale tab error'}));
+ store.sync(event(storage,saved.id));assert.deepEqual(ids(store),[]);assert.equal(storage.getItem(filingTerminalPrefix+saved.id),null);
+ store.sync({key:legacyFilingKey,newValue:storage.getItem(legacyFilingKey),storageArea:storage});assert.deepEqual(ids(store),[]);
+ storage.quota=false;store.sync(event(storage,saved.id));
+ assert.equal(storage.getItem(filingTerminalPrefix+saved.id),'1');assert.deepEqual(ids(createFilingStore(storage)),[]);
 });
