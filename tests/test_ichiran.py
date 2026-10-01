@@ -104,3 +104,38 @@ def test_dictionary_dedup_keeps_the_preferred_reading(monkeypatch):
     ])
     choices = ichiran.dictionary_meanings('明日', 'あした')['meanings']
     assert len(choices) == 1 and choices[0]['baseReading'] == 'あした'
+
+
+@pytest.mark.parametrize('surface,base', [
+    ('速く', '速い'), ('早く', '早い'), ('遠く', '遠い'), ('近く', '近い'), ('多く', '多い'),
+    ('速かった', '速い'), ('早かった', '早い'),
+])
+def test_live_adjective_families_preserve_their_upstream_spelling(surface, base):
+    body = '「' + surface + '。」'
+    token = next(t for t in language.tokenize(body) if t['surface'] == surface)
+    assert token['base'] == base
+    assert token['partOfSpeech'] == 'adj-i'
+    assert body[token['start']:token['end']] == surface
+    canonical = [c for c in token['choices'] if c['base'] == base]
+    assert canonical and all(c['base'] == base for c in canonical)
+
+
+def test_canonical_adverbial_root_uses_spelling_as_well_as_reading():
+    def candidate(surface, base):
+        return {'text': surface, 'kana': 'はやく', 'conj': [
+            {'reading': base + ' 【はやい】', 'prop': [{'pos': 'adj-i', 'type': 'Adverbial'}],
+             'seq': 1404975, 'gloss': [{'gloss': 'fast', 'pos': '[adj-i]', 'ordinal': 0}]}]}
+    word = {'alternative': [
+        {'text': '速く', 'kana': 'はやく', 'seq': 1400150, 'gloss': [{'gloss': 'quickly', 'pos': '[adv]'}]},
+        candidate('早く', '早い'), candidate('速く', '速い'),
+    ]}
+    details = ichiran.word_details(word, '速く')
+    assert details['base'] == '速い' and details['baseReading'] == 'はやい'
+    assert details['partOfSpeech'] == 'adj-i'
+    assert any(c['base']=='速い' for c in details['choices'])
+
+
+@pytest.mark.parametrize('surface', ['とって', '通り', 'なし', '出来る', 'より', 'にとって'])
+def test_live_unrelated_homographs_keep_the_primary_dictionary_headword(surface):
+    token = next(t for t in language.tokenize(surface) if t['surface'] == surface)
+    assert token['base'] == surface

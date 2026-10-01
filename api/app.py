@@ -22,6 +22,8 @@ class VocabularyCleanup(Strict):
 class RetokenizeApply(Strict):
     jobId:str
     expectedFingerprint:str=Field(min_length=64,max_length=64,pattern='^[0-9a-f]+$')
+class RetokenizePlan(Strict):
+    familyRepairs:list[str]=Field(default_factory=list,max_length=100)
 class Import(Strict):
     title:str=Field(min_length=1,max_length=200)
     body:str=Field(min_length=1,max_length=50000)
@@ -180,12 +182,13 @@ def health():
 @app.get('/api/v1/schema')
 def schema():return SCHEMA
 @app.post('/api/v1/maintenance/retokenize/plan',status_code=202,response_model=SubmittedJob)
-def retokenize_plan():
+def retokenize_plan(p:RetokenizePlan|None=None):
     from api.retokenize import sentences
     from api.vocabulary_cleanup import fingerprint
     def prepare(t):
-        snapshot=t.snapshot();key=fingerprint(snapshot)
-        job=domain.create_job(t,'retokenize',{'fingerprint':key,'sentences':sentences(snapshot)},'retokenize:ichiran:'+key)
+        snapshot=t.snapshot();key=fingerprint(snapshot);repairs=sorted(set(p.familyRepairs if p else []))
+        payload={'fingerprint':key,'sentences':sentences(snapshot),'familyRepairs':repairs}
+        job=domain.create_job(t,'retokenize',payload,'retokenize:ichiran:'+key+':'+digest(packed(repairs)))
         return {'jobId':job['id']}
     return graph().write('retokenize.plan',prepare,actor='agent')
 @app.post('/api/v1/maintenance/retokenize/apply')
@@ -196,7 +199,7 @@ def retokenize_apply(p:RetokenizeApply):
         if j['type']!='Job' or j['kind']!='retokenize' or j['jobState']!='ready':raise Conflict('A completed retokenization plan is required')
         result=json.loads(j['result'])
         if result['plan']['fingerprint']!=p.expectedFingerprint:raise Conflict('Fingerprint does not match the reviewed plan')
-        return apply(t,result['sentences'],p.expectedFingerprint)
+        return apply(t,result['sentences'],p.expectedFingerprint,json.loads(j['payload']).get('familyRepairs',[]))
     return graph().write('retokenize.apply',mutate,actor='agent')
 
 @app.get('/api/v1/texts')
@@ -576,7 +579,7 @@ def complete(id:str,p:JobResult,authorization:str|None=Header(default=None)):
         elif j['kind']=='word-meaning':result=word_meanings.complete(t,payload,result)
         elif j['kind']=='retokenize':
             from api.retokenize import plan
-            _,report=plan(t.snapshot(),result['sentences'])
+            _,report=plan(t.snapshot(),result['sentences'],payload.get('familyRepairs',[]))
             result={'sentences':result['sentences'],'plan':report,'_progress':json.loads(j['result']).get('_progress',{})}
         else:raise ValueError('Unknown job kind')
         t.update(id,jobState='ready',result=packed(result),error='',lease='')

@@ -14,7 +14,7 @@ def sentences(snapshot):
                    for n in snapshot['nodes'] if 'Sentence' in n['labels']), key=lambda s:s['id'])
 
 
-def plan(snapshot, analysis):
+def plan(snapshot, analysis, repair_families=()):
     validate_graph(snapshot)
     nodes={n['properties']['id']:copy.deepcopy(n) for n in snapshot['nodes']}
     props={id:n['properties'] for id,n in nodes.items()}
@@ -45,15 +45,58 @@ def plan(snapshot, analysis):
         nodes[id]={'labels':['Entity',kind],'properties':p};props[id]=p;kinds[id]=kind;keys[key]=id
         return id
     words={p['surface']:id for id,p in props.items() if kinds[id]=='Word'}
-    conflicts={};new_forms={}
-    def root(surface,reading,pos):
+    conflicts={};new_forms={};repaired=[]
+    def status_values(owner):
+        return [copy.deepcopy({k:v for k,v in props[b].items()
+                               if k not in ('id','identityKey','revision','createdAt','updatedAt')})
+                for a,r,b in sorted(edges) if a==owner and r=='STATUS']
+    def statuses(owner,inherited=None):
+        for values in inherited or [{'state':'new'}]:
+            suffix=':'+values['area'] if 'area' in values else ''
+            status=entity('LearningStatus',f'status:{owner}{suffix}',**values)
+            edges.add((owner,'STATUS',status))
+    def root(surface,reading,pos,inherited=None):
         if not surface or latin_word(surface):raise ValueError('Invalid Japanese base form')
         if surface in words:return props[words[surface]]['family']
         key='word:'+digest(surface);id=str(uuid.uuid5(uuid.NAMESPACE_URL,'https://kotoba.local/'+key))
         entity('Word',key,surface=surface,reading=reading,partOfSpeech=pos,family=id);words[surface]=id
         edges.add((id,'BASE_FORM',id))
-        status=entity('LearningStatus',f'status:{id}',state='new');edges.add((id,'STATUS',status))
+        statuses(id,inherited)
         return id
+
+    # Family changes are explicit reviewed migration inputs, never an automatic
+    # side effect of importing or reanalyzing a previously saved spelling.
+    requested=set(repair_families);original_words=dict(words);new_target_statuses={}
+    evidence=defaultdict(list)
+    for sentence in parsed.values():
+        for token in eligible_tokens(sentence['body'],sentence['tokens']):
+            if token['surface'] in requested:evidence[token['surface']].append(token)
+    for surface in sorted(requested):
+        tokens=evidence[surface]
+        if surface not in words or not tokens:raise ValueError('Family repair requires a stored spelling with analyzed occurrences: '+surface)
+        targets={token['selected']['base'] for token in tokens}
+        if len(targets)!=1:raise ValueError('Family repair has conflicting upstream roots: '+surface)
+        token=tokens[0];desired=next(iter(targets));wid=words[surface];oldbase=props[wid]['family']
+        if props[oldbase]['surface']==desired:continue
+        if wid==oldbase:raise ValueError('Canonical family roots require a separately reviewed family migration: '+surface)
+        existing=words.get(desired)
+        if existing and existing!=wid and props[existing]['family']!=existing:
+            raise ValueError('Family repair target is not a canonical root: '+desired)
+        inherited=status_values(oldbase)
+        if desired not in original_words:
+            signature=packed(sorted(inherited,key=packed))
+            if desired in new_target_statuses and new_target_statuses[desired]!=signature:
+                raise ValueError('Family repair would combine different saved mastery values: '+desired)
+            new_target_statuses[desired]=signature
+        reading=token['selected'].get('baseReading',token['baseReading'])
+        if existing==wid:
+            base=wid;statuses(base,inherited)
+        else:
+            base=root(desired,reading,token['partOfSpeech'],inherited)
+        edges.discard((wid,'BASE_FORM',oldbase));edges.add((wid,'BASE_FORM',base));props[wid]['family']=base
+        repaired.append({'surface':surface,'wordId':wid,'previousBase':props[oldbase]['surface'],'previousBaseId':oldbase,
+                         'base':desired,'baseId':base,'previousStatuses':inherited,'resultingStatuses':status_values(base),
+                         'statusPolicy':'preserve-existing-target' if desired in original_words and existing!=wid else 'copy-previous-family'})
     def word(token):
         desired=token['selected']['base'];reading=token['selected'].get('baseReading',token['baseReading'])
         base=root(desired,reading,token['partOfSpeech']);surface=token['surface']
@@ -128,15 +171,15 @@ def plan(snapshot, analysis):
             'occurrencesBefore':old_total,'occurrencesAfter':new_total,
             'created':dict(sorted(Counter(kinds[id] for id in set(nodes)-original).items())),
             'removed':dict(sorted(Counter(kinds[id] for id in removed).items())),
-            'newForms':new_forms,'retainedFamilies':list(conflicts.values()),'preservedEncounterEvidence':discarded_evidence,
+            'newForms':new_forms,'retainedFamilies':list(conflicts.values()),'repairedFamilies':repaired,'preservedEncounterEvidence':discarded_evidence,
             'preservedTexts':sum(k=='Text' for k in kinds.values())}
     return result,report
 
 
-def apply(t,analysis,expected_fingerprint):
+def apply(t,analysis,expected_fingerprint,repair_families=()):
     before=t.snapshot()
     if fingerprint(before)!=expected_fingerprint:raise Conflict('The corpus changed. Create and review a new retokenization plan.')
-    after,report=plan(before,analysis)
+    after,report=plan(before,analysis,repair_families)
     old={n['properties']['id']:n for n in before['nodes']};new={n['properties']['id']:n for n in after['nodes']}
     a={(e['from'],e['type'],e['to']) for e in before['edges']};b={(e['from'],e['type'],e['to']) for e in after['edges']}
     created=set(new)-set(old);deleted=set(old)-set(new)

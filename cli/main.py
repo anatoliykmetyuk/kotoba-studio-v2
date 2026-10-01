@@ -72,7 +72,7 @@ def main():
  q=sub.add_parser('request');q.add_argument('method');q.add_argument('path');q.add_argument('--json');q.add_argument('--file',type=Path)
  q=sub.add_parser('backup');q.add_argument('directory',type=Path)
  q=sub.add_parser('restore');q.add_argument('directory',type=Path)
- q=sub.add_parser('retokenize-plan')
+ q=sub.add_parser('retokenize-plan');q.add_argument('--repair-family',action='append',default=[],metavar='SPELLING',help='Explicitly repair this stored form using its consistent analyzed root; repeat for multiple forms')
  q=sub.add_parser('retokenize-apply');q.add_argument('--job',required=True);q.add_argument('--backup',type=Path,required=True);q.add_argument('--fingerprint',required=True)
  q=sub.add_parser('vocabulary-plan')
  q=sub.add_parser('vocabulary-apply');q.add_argument('--backup',type=Path,required=True);q.add_argument('--fingerprint',required=True)
@@ -92,7 +92,7 @@ def main():
  elif a.command=='query':result=call(url,'/graph/query',{'query':a.cypher,'params':json.loads(a.params)})
  elif a.command=='transaction':result=call(url,'/graph/transaction',{'statements':json.loads(a.file.read_text()),'dryRun':a.dry_run})
  elif a.command=='request':result=call(url,a.path,json.loads(a.file.read_text() if a.file else a.json) if a.file or a.json else None,a.method.upper())
- elif a.command=='retokenize-plan':result=call(url,'/maintenance/retokenize/plan',{})
+ elif a.command=='retokenize-plan':result=call(url,'/maintenance/retokenize/plan',{'familyRepairs':a.repair_family})
  elif a.command=='retokenize-apply':
   from api.vocabulary_cleanup import fingerprint
   data=call(url,'/graph/export')

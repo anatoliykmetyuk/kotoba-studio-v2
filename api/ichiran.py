@@ -82,6 +82,25 @@ def lexical_head(word):
     return word
 
 
+def canonical_root(variants):
+    """Prefer an explicit adjectival adverbial analysis over its lexical alias.
+
+    Ichiran also lists some inflected adjectives as independent adverbs. Their
+    canonical learning family still follows the supplied adjective conjugation,
+    including its exact kanji spelling. Other homographs retain upstream rank.
+    """
+    primary = lexical_head(variants[0])
+    for variant in variants:
+        head = lexical_head(variant)
+        if head.get('text') != primary.get('text') or kana(head.get('kana')) != kana(primary.get('kana')):
+            continue
+        for root in roots(head):
+            if any(prop.get('pos') == 'adj-i' and prop.get('type') == 'Adverbial'
+                   for prop in root.get('prop', [])):
+                return root
+    return next(roots(primary), None) if not primary.get('gloss') else None
+
+
 def word_details(word, surface):
     variants = alternatives(word)
     primary = variants[0]
@@ -89,7 +108,7 @@ def word_details(word, surface):
     # A direct dictionary headword (including expressions such as にとって)
     # retains its exact spelling. Only upstream conjugations change the base.
     head = lexical_head(primary)
-    original = next(roots(head), None) if not head.get('gloss') else None
+    original = canonical_root(variants)
     if original:
         base, base_reading = reading_parts(original['reading'])
     elif head is not primary:
@@ -100,6 +119,8 @@ def word_details(word, surface):
     for variant in variants:
         head = lexical_head(variant)
         sources = [head] if head.get('gloss') else list(roots(head))
+        if head.get('gloss') and original and original in list(roots(head)):
+            sources.append(original)
         for source in sources:
             source_base, source_reading = reading_parts(source.get('reading'))
             # Direct headwords retain the exact source spelling, including
@@ -120,9 +141,12 @@ def word_details(word, surface):
                                 'partOfSpeech': pos, 'sourceType': 'JMdict'})
     unique = {}
     for choice in choices:
-        unique.setdefault(choice['sense'], choice)
+        # A shared JMdict sequence may cover distinct spellings. Keep the
+        # upstream root beside its sense until ownership is resolved by Word.
+        unique.setdefault((choice['sense'], choice['base']), choice)
+    base_choices = [choice for choice in choices if choice['base'] == base]
     return {'base': base, 'reading': reading, 'baseReading': base_reading,
-            'partOfSpeech': choices[0]['partOfSpeech'] if choices else 'unknown',
+            'partOfSpeech': base_choices[0]['partOfSpeech'] if base_choices else 'unknown',
             'choices': list(unique.values())}
 
 
