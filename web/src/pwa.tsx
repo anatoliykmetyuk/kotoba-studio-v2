@@ -31,8 +31,9 @@ export function usePwaUpdates(){
     if(!mounted.current)return reg;
     const watch=(worker:ServiceWorker|null)=>{
      if(!worker)return;
+     const replacesActive=!!reg.active&&reg.active!==worker;
      const changed=()=>{
-      if(worker.state==='installed'&&navigator.serviceWorker.controller){pending.current=worker;setUpdate(worker)}
+      if(worker.state==='installed'&&replacesActive){pending.current=worker;setUpdate(worker)}
       if(worker.state==='redundant'||worker.state==='activated'){
        worker.removeEventListener('statechange',changed);cleanups.current.delete(cleanup);
        // Another tab can activate this worker while this document still runs
@@ -65,7 +66,8 @@ export function usePwaUpdates(){
    await bounded(reg.update());
    if(reg.installing)await installed(reg.installing);
    if(mounted.current){
-    const ready=reg.waiting??(pending.current?.state!=='redundant'?pending.current:null);
+    const waiting=reg.waiting;
+    const ready=(waiting&&reg.active&&reg.active!==waiting?waiting:null)??(pending.current?.state!=='redundant'?pending.current:null);
     pending.current=ready;setUpdate(ready);setChecked(true);
    }
   }catch{if(mounted.current)setError(navigator.onLine?'Could not check for updates. Check your connection and try again.':'Offline. Connect to check for updates.')}

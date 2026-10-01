@@ -20,6 +20,7 @@ test('Settings checks, reports failures, and reloads only a ready app update',as
  await writeFile(saved,original);await writeFile(changed,original+'\n// Acceptance update '+Date.now()+'\n');await writeFile(invalid,'invalid javascript !@#');
  try{
   await page.goto('/');await page.waitForFunction(()=>navigator.serviceWorker.controller?.state==='activated');
+  await expect(page.locator('.connection-banner').filter({hasText:'Update available'})).toHaveCount(0);
   await page.getByRole('button',{name:'Settings',exact:true}).click();
   const settings=page.getByRole('dialog',{name:'Settings',exact:true}),updates=settings.getByRole('region',{name:'App updates',exact:true});
   const check=updates.getByRole('button',{name:'Check for updates',exact:true});
@@ -48,9 +49,22 @@ test('Settings checks, reports failures, and reloads only a ready app update',as
   const other=await page.context().newPage();
   try{
    await other.goto('/');
-   await other.evaluate(async()=>{(await navigator.serviceWorker.getRegistration())!.waiting!.postMessage('activate-update')});
+   const target=await other.evaluateHandle(async()=>{
+    const registration=await navigator.serviceWorker.getRegistration();
+    if(!registration?.waiting)throw new Error('Ready update worker is missing');
+    return registration.waiting;
+   });
+   try{
+    await target.evaluate(worker=>worker.postMessage('activate-update'));
+    try{await expect.poll(()=>target.evaluate(worker=>worker.state)).toBe('activated')}
+    catch(error){
+     const states=await target.evaluate(async worker=>{const registration=await navigator.serviceWorker.getRegistration();return {target:worker.state,targetIsWaiting:worker===registration?.waiting,active:registration?.active?.state,waiting:registration?.waiting?.state,installing:registration?.installing?.state,controller:navigator.serviceWorker.controller?.state}});
+     await info.attach('service-worker-activation',{body:JSON.stringify(states),contentType:'application/json'});throw error;
+    }
+   }finally{await target.dispose()}
+   await page.bringToFront();
    await expect.poll(()=>page.evaluate(async()=>!(await navigator.serviceWorker.getRegistration())!.waiting)).toBe(true);
-   await page.bringToFront();await check.click();await expect(updates.getByRole('status')).toHaveText('Update available');
+   await check.click();await expect(updates.getByRole('status')).toHaveText('Update available');
   }finally{await other.close()}
 
   await Promise.all([page.waitForEvent('load'),reload.click()]);
