@@ -1,4 +1,4 @@
-import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
+import {test,expect,type APIRequestContext,type Page} from './fixtures';
 import type {Example,TextItem} from '../../web/src/api';
 import {muteTestOutput} from './audio-output';
 import {pauseAcceptanceWorker} from './acceptance-worker';

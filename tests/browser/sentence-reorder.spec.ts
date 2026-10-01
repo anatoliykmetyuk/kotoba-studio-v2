@@ -1,4 +1,4 @@
-import {test,expect,type APIRequestContext,type Locator,type Page} from '@playwright/test';
+import {test,expect,type APIRequestContext,type Locator,type Page} from './fixtures';
 import {muteTestOutput} from './audio-output';
 import {penTap} from './input';
 

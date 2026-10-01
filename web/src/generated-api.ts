@@ -1063,6 +1063,11 @@ export interface components {
             /** Expectedfingerprint */
             expectedFingerprint: string;
         };
+        /** RetokenizePlan */
+        RetokenizePlan: {
+            /** Familyrepairs */
+            familyRepairs?: string[];
+        };
         /** SettingsPatch */
         SettingsPatch: {
             /** Theme */
@@ -1262,7 +1267,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RetokenizePlan"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {
@@ -1271,6 +1280,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubmittedJob"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -1,4 +1,4 @@
-import {test,expect,type Locator,type Page} from '@playwright/test';
+import {test,expect,type Locator,type Page} from './fixtures';
 import type {TextItem} from '../../web/src/api';
 
 // Chromium exercises the real mobile touch pipeline. WebKit has no remote touch

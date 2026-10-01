@@ -1,4 +1,4 @@
-import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
+import {test,expect,type APIRequestContext,type Page} from './fixtures';
 import {execFile} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {promisify} from 'node:util';

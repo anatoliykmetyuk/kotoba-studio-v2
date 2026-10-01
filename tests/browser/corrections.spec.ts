@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 import type {TextItem} from '../../web/src/api';
 const origin=process.env.KOTOBA_TEST_BASE_URL??'https://localhost:8443';
 test.use({baseURL:origin});

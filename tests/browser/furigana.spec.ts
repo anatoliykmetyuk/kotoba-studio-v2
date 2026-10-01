@@ -1,8 +1,8 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 import type {TextItem} from '../../web/src/api';
 
 test('kanji ruby preserves whole-token interaction and exact source text',async({page,request},info)=>{
- const body='不足しており、求めています。見込みです。しかし、ゼレンスキー大統領は追加支援を求めています。２０２６年と270億ドル。';
+ const body='不足しており、求めています。見込みです。しかし、ゼレンスキー大統領は追加支援を求めています。２０２６年と270億ドル。記録 phone-webkit-portrait 1790853448043。';
  const response=await request.post('/api/v1/imports',{data:{title:'Kanji furigana acceptance',body}});
  expect(response.ok()).toBe(true);const submitted=await response.json();let id=submitted.textId;
  if(!id)await expect.poll(async()=>{

@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 const execute=promisify(execFile);

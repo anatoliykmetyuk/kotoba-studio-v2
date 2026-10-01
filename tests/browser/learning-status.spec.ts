@@ -1,4 +1,4 @@
-import {test,expect,type APIRequestContext} from '@playwright/test';
+import {test,expect,type APIRequestContext} from './fixtures';
 import type {TextItem} from '../../web/src/api';
 import {muteTestOutput} from './audio-output';
 
@@ -16,27 +16,27 @@ test('one Learning Status controls highlights, persists, and filters both lesson
  await muteTestOutput(page);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  const {text,bySurface}=await fixture(request);
  await page.goto('/#'+text.id);await expect(page.locator('.reader')).toBeVisible();
- const fish=bySurface('魚');await page.locator(`[data-token-id="${fish.id}"]`).click();
+ const fish=bySurface('魚');await page.locator(`[data-token-id="${fish.id}"]`).tap();
  const panel=page.getByRole('dialog',{name:'Word details'}),group=panel.getByRole('group',{name:'Learning Status'});
  await expect(group).toHaveCount(1);await expect(group.getByRole('button',{name:'Learning',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(panel.getByRole('group',{name:/reading status|listening status/i})).toHaveCount(0);
- await group.getByRole('button',{name:'Known',exact:true}).click();await expect(group.getByRole('button',{name:'Known',exact:true})).toHaveAttribute('aria-pressed','true');
- await panel.getByRole('button',{name:'Close word details'}).click();await page.reload();
+ await group.getByRole('button',{name:'Known',exact:true}).tap();await expect(group.getByRole('button',{name:'Known',exact:true})).toHaveAttribute('aria-pressed','true');
+ await panel.getByRole('button',{name:'Close word details'}).tap();await page.reload();
  await expect(page.locator(`[data-token-id="${fish.id}"]`)).toHaveClass(/known/);
  const pool=await(await request.get('/api/v1/practice?textId='+text.id)).json();
  expect(new Set(pool.words.map((w:{base:string})=>w.base))).toEqual(new Set(['猫','犬']));
  expect(pool.sentences).toHaveLength(2);expect(pool.sentences.every((s:{words:{state:string}[]})=>s.words.some(w=>['learning','familiar'].includes(w.state)))).toBe(true);
- await page.locator('.reader-finish').getByRole('button',{name:'Practice',exact:true}).click();
+ await page.locator('.reader-finish').getByRole('button',{name:'Practice',exact:true}).tap();
  await expect(page.getByLabel('Include all statuses')).toHaveCount(0);
  for(let question=1;question<=2;question++){
   await expect(page.locator('.practice-progress')).toContainText(`Question ${question} of 2`);
   const base=await page.locator('.practice-card h2').innerText();const word=pool.words.find((w:{base:string})=>w.base===base);
-  expect(word).toBeTruthy();await page.locator('.answer-grid').getByRole('button',{name:word.meaning,exact:true}).click();
+  expect(word).toBeTruthy();await page.locator('.answer-grid').getByRole('button',{name:word.meaning,exact:true}).tap();
   if(question===1)await expect(page.locator('.practice-progress')).toContainText('Question 2 of 2');
  }
  await expect(page.getByRole('heading',{name:'Practice complete'})).toBeVisible();
- await page.getByRole('button',{name:'Practice again',exact:true}).click();await expect(page.locator('.practice-progress')).toContainText('Question 1 of 2');
- await page.getByRole('button',{name:'Build a sentence',exact:true}).click();await expect(page.locator('.pieces button').first()).toBeVisible();
+ await page.getByRole('button',{name:'Practice again',exact:true}).tap();await expect(page.locator('.practice-progress')).toContainText('Question 1 of 2');
+ await page.getByRole('button',{name:'Build a sentence',exact:true}).tap();await expect(page.locator('.pieces button').first()).toBeVisible();
  await expect(page.locator('.practice-progress')).toContainText('Question 1 of 2');
  const pieces=await page.locator('.pieces button').evaluateAll(buttons=>buttons.sort((a,b)=>Number((a as HTMLElement).dataset.piece)-Number((b as HTMLElement).dataset.piece)).map(b=>b.textContent).join(''));
  expect(pool.sentences.some((s:{body:string})=>s.body===pieces)).toBe(true);

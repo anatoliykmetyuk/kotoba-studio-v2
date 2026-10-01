@@ -1,4 +1,4 @@
-import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
+import {test,expect,type APIRequestContext,type Page} from './fixtures';
 
 async function importLesson(request:APIRequestContext,name:string){
  const response=await request.post('/api/v1/imports',{data:{title:`Reading position ${name}`,body:'猫は窓のそばで眠っています。私は温かいお茶を飲みました。\n\n'.repeat(45)+`記録 ${name} ${Date.now()}。`,folder:'Acceptance'}});

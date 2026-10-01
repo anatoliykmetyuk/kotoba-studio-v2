@@ -27,6 +27,10 @@ ingestion does not create folders or assign membership. Imports save
 unfiled in All texts; agents and the UI folder selector attach them afterward
 in a separate graph transaction. Folder selection lists existing folders only,
 including empty folders.
+Pending filing survives dialog dismissal and reload. Independent browser storage
+entries prevent tabs from overwriting accepted requests; terminal records prevent
+completed or dismissed requests from resurfacing after stale writes or legacy
+queue recovery.
 Filing failure must not undo the imported lesson. Duplicate folder names fail
 import preflight before any lesson work. The broader ontology refactor is deferred.
 Library order is creation time, newest first; reading and organization edits do
@@ -126,6 +130,10 @@ guarded atomic apply with a backup. Preserve Text IDs, original content, cursors
 completion states, existing Words, meanings and learning statuses. Remap encounter
 evidence without increasing counts. Retain and report conflicting saved families
 instead of silently changing their mastery.
+Explicit family-repair inputs may redirect a stored noncanonical form when all
+upstream occurrences agree. Preserve its UUID and source placements. A new base
+copies the previous family status; an existing canonical base keeps its status.
+Reject canonical-root moves and conflicting analysis or inherited statuses.
 
 All project-owned persistent data lives in git-ignored `data/` or `.runtime/`.
 Neo4j authentication is disabled for the local installation. Production Browser
@@ -143,6 +151,9 @@ WebKit and iPad WebKit in both orientations over trusted Tailscale HTTPS, plus
 wide desktop overlays. Verify actual media progression, gestures, persistence,
 nonzero safe-area insets, service-worker updates and real outage recovery. Inspect
 screenshots. State browser-emulation and physical-device limitations accurately.
+Browser acceptance runs silently, including additional tabs and standalone app
+windows. Tests retain native decoding, playback progression and ended events and
+verify that generated audio contains a signal.
 
 Fresh-context reviewers examine correctness, architecture, ontology/database
 practice and query efficiency at important checkpoints. Keep review and optional

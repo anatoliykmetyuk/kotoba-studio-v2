@@ -41,6 +41,23 @@
       "post": {
         "summary": "Retokenize Plan",
         "operationId": "retokenize_plan_api_v1_maintenance_retokenize_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RetokenizePlan"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "P"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "description": "Successful Response",
@@ -48,6 +65,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SubmittedJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -2619,6 +2646,21 @@
           "expectedFingerprint"
         ],
         "title": "RetokenizeApply"
+      },
+      "RetokenizePlan": {
+        "properties": {
+          "familyRepairs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Familyrepairs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RetokenizePlan"
       },
       "SettingsPatch": {
         "properties": {

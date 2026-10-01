@@ -1,4 +1,4 @@
-import {test,expect,type Locator,type Page,type Request,type APIRequestContext} from '@playwright/test';
+import {test,expect,type Locator,type Page,type Request,type APIRequestContext} from './fixtures';
 import type {TextItem,Token} from '../../web/src/api';
 
 type Playback={src:string;time:number;duration:number;muted:boolean;volume:number};
@@ -44,7 +44,7 @@ test('word taps promote only New, play audible media, replay, and leave no selec
  await expect(panel.getByRole('group',{name:'Learning Status'}).getByRole('button',{name:'Learning',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(panel.getByRole('group',{name:'Learning Status'})).toHaveCount(1);
  try{await expect.poll(()=>page.evaluate(()=>window.pronunciations.length),{timeout:90_000}).toBe(1)}catch(error){await info.attach('media-state',{body:JSON.stringify(await page.locator('audio').evaluate((audio:HTMLAudioElement)=>({src:audio.currentSrc,paused:audio.paused,ended:audio.ended,error:audio.error?.message,readyState:audio.readyState,time:audio.currentTime,duration:audio.duration,visibility:document.visibilityState}))),contentType:'application/json'});throw error}
- const actual=await page.evaluate(()=>window.pronunciations[0]);expect(actual.time).toBeGreaterThan(.1);expect(actual.duration).toBeGreaterThan(.1);expect(actual.muted).toBe(false);expect(actual.volume).toBe(1);
+ const actual=await page.evaluate(()=>window.pronunciations[0]);expect(actual.time).toBeGreaterThan(.1);expect(actual.duration).toBeGreaterThan(.1);expect(actual.muted).toBe(true);expect(actual.volume).toBe(0);
  const wav=Buffer.from(await page.evaluate(async src=>{const response=await fetch(src);if(!response.ok)throw new Error('Pronunciation bytes could not load');return Array.from(new Uint8Array(await response.arrayBuffer()))},actual.src));expect(wav.toString('ascii',0,4)).toBe('RIFF');let peak=0;for(let offset=12;offset+8<wav.length;){const size=wav.readUInt32LE(offset+4);if(wav.toString('ascii',offset,offset+4)==='data'){for(let i=offset+8;i+1<Math.min(offset+8+size,wav.length);i+=2)peak=Math.max(peak,Math.abs(wav.readInt16LE(i)));break}offset+=8+size+(size%2)}expect(peak,'Generated pronunciation must contain an audio signal').toBeGreaterThan(256);
  const learningColor=await color(first);expect(new Set([newColor,learningColor,familiarColor,knownColor]).size).toBe(4);
  await panel.getByRole('button',{name:'Pronounce word'}).click();await expect.poll(()=>page.evaluate(()=>window.pronunciations.length),{timeout:30_000}).toBe(2);

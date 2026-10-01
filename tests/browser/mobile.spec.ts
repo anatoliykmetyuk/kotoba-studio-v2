@@ -1,4 +1,4 @@
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Page} from './fixtures';
 const body='猫は窓のそばで眠っています。私は温かいお茶を飲みました。';
 async function noOverflow(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBeTruthy()}
 async function visibleButton(page:Page,name:string){return page.getByRole('button',{name,exact:true}).filter({visible:true}).first()}

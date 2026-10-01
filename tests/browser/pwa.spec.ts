@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -123,8 +123,10 @@ test('actual Tailscale upstream outage preserves cached reading and queued progr
   await page.reload();await expect(page.locator('.book-body')).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(500);
   expect(await page.evaluate(key=>Number(localStorage.getItem(key)),key)).toBeGreaterThanOrEqual(queued);
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath('cached-reading-during-upstream-outage.png')});
+  const layout=await page.evaluate(()=>({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,overflow:Array.from(document.querySelectorAll('*')).map(el=>({tag:el.tagName,class:el.className,box:el.getBoundingClientRect().toJSON()})).filter(el=>el.box.right>innerWidth+1||el.box.left< -1)}));
+  if(layout.scrollWidth>layout.width+1)await info.attach('offline-layout',{body:JSON.stringify(layout),contentType:'application/json'});
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width+1);
  }finally{
   await execute('docker',['start',container]);
   await expect.poll(async()=>{try{return(await request.get('/api/v1/texts')).status()}catch{return 0}},{timeout:30_000}).toBe(200);

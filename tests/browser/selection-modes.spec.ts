@@ -1,4 +1,4 @@
-import {test,expect,type Page,type Locator} from '@playwright/test';
+import {test,expect,type Page,type Locator} from './fixtures';
 import {muteTestOutput} from './audio-output';
 type Point={x:number;y:number};
 type Input='touch'|'pen'|'mouse';

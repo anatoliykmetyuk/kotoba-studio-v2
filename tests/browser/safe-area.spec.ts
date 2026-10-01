@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 
 test('reader toolbar and popups respect nonzero device safe areas after scrolling and rotation',async({page,request,browserName},info)=>{
  const cdp=browserName==='chromium'?await page.context().newCDPSession(page):null;
