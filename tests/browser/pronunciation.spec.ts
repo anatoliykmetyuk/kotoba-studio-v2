@@ -25,7 +25,7 @@ async function pronunciationLesson(request:APIRequestContext):Promise<TextItem>{
  return(await request.get('/api/v1/texts/'+id)).json();
 }
 
-test('word taps promote only New, play audible media, replay, and leave no selection after a single-token long press',async({page,request,browserName},info)=>{
+test('word taps promote only New, play non-silent media, replay, and retain a cancellable long-press anchor',async({page,request,browserName},info)=>{
  const settings=await request.patch('/api/v1/settings',{data:{area:'reading',theme:'light',fontSize:20,lineHeight:1.85}});expect(settings.ok()).toBeTruthy();
  const text=await pronunciationLesson(request);
  const unique=[...new Map(text.sentences.flatMap(s=>s.tokens).map(t=>[t.baseId,t])).values()];
@@ -60,8 +60,9 @@ test('word taps promote only New, play audible media, replay, and leave no selec
  const beforeHold=await (await request.get('/api/v1/words/'+first.wordId)).json();
  const holdRequests:string[]=[];const recordHoldRequest=(r:Request)=>{if(/\/api\/v1\/(?:speech(?:\/|$)|phrase-tools\/|words\/[^/]+\/(?:learn|status)$)/.test(new URL(r.url()).pathname))holdRequests.push(r.url())};page.on('request',recordHoldRequest);
  await longPressToken(page,browserName,token(first));
- await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('.range-selected')).toHaveCount(0);await expect(page.locator('audio')).not.toHaveAttribute('src',/.+/);await expect(page.locator('audio')).toHaveJSProperty('paused',true);expect(await page.evaluate(()=>window.pronunciations)).toEqual([]);
+ await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('.range-selected')).toHaveCount(1);await expect(token(first)).toHaveClass(/range-selected/);await expect(page.locator('audio')).not.toHaveAttribute('src',/.+/);await expect(page.locator('audio')).toHaveJSProperty('paused',true);expect(await page.evaluate(()=>window.pronunciations)).toEqual([]);
  const saved=await (await request.get('/api/v1/words/'+first.wordId)).json();expect(saved.statuses).toEqual(beforeHold.statuses);expect(saved.statuses.reading.state).toBe('new');expect(holdRequests).toEqual([]);page.off('request',recordHoldRequest);
+ await page.keyboard.press('Escape');await expect(page.locator('.range-selected')).toHaveCount(0);
  const beforeFinal=await page.evaluate(()=>window.pronunciations.length);await token(first).tap();await panel.getByRole('group',{name:'Learning Status'}).getByRole('button',{name:'Known',exact:true}).click();await expect(panel.getByRole('group',{name:'Learning Status'}).getByRole('button',{name:'Known',exact:true})).toHaveAttribute('aria-pressed','true');await expect(page.getByRole('alert')).toHaveCount(0);
  await expect.poll(()=>page.evaluate(()=>window.pronunciations.length),{timeout:30_000}).toBe(beforeFinal+1);
  await panel.getByRole('button',{name:'Close word details',exact:true}).click();await page.locator('.reader .back-button').click();

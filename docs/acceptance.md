@@ -1,5 +1,79 @@
 # Release acceptance
 
+## Obsidian task fixes, 2026-10-01
+
+Furigana covers kanji only, using conservative kana alignment without altering
+source text or token offsets. Import and revision dialogs select existing
+folders, including empty folders. Accepted imports file independently and retain
+retry state across dialog dismissal, reload, unavailable storage and concurrent
+PWA tabs. Completion records prevent stale requests from resurfacing.
+
+The Ichiran adapter retains upstream segmentation and uses explicit conjugation
+metadata to distinguish 速く→速い from 早く→早い. Production repair preserved the
+original 速く UUID, source placements, meanings, encounters and reading progress.
+Its newly created 速い family inherited the previous status; 早い remains separate.
+The repeated repair plan contained no changes.
+
+The compiled OML contract now assigns one Learning Status to each canonical
+family. Production migrated 1,495 families to the lower legacy status and
+preserved 14,759 domain entities and all non-status relationships. Installed
+clients retain compatible aliases, and legacy cached readings normalize to the
+lower state. Practice defaults to Learning and Familiar, without the Include
+all statuses control; eligible sentence exercises retain every source token.
+
+The integrated backend run passed 134 tests with one opt-in local-model skip in
+21.90 seconds. All 60 pure TypeScript tests passed. Official OML compilation,
+TypeScript checks, frontend builds, preservation checks and graph audits passed.
+Independent implementation and integration reviewers found no remaining notable
+recommendations.
+
+All browser contexts mute output before native playback, including additional
+tabs and standalone PWA windows. Audio assertions still require native playback
+progression and completion, with non-silent generated WAV bytes. These checks do
+not establish physical iOS speaker output or unmuted gesture autoplay.
+
+Disposable acceptance data was backed up and reset through the validated restore
+API before final device checks. Accumulated fixtures had delayed structural
+writes beyond test assertions. Subsequent trace inspection also corrected exact
+label selectors for populated textareas and armed frame-based grading feedback
+observation before tapping; product timing and assertions were retained.
+
+The affected 86-case device matrix took 11.0 minutes: 78 passed initially and
+eight failed. Six failures asserted an obsolete long-press behavior; the approved
+contract retains a cancellable anchor. Two exposed PWA update problems. Initial
+installation now distinguishes its worker from a replacement of an active worker,
+and explicit activation retains the asynchronous service-worker operation. The
+cross-tab test observes the actual requested worker and records its state on
+failure; the original activation failure's precise cause was not established.
+All eight update configurations and all six native playback/anchor checks passed
+in the corrected 20-case run (19 passed, one folder layout failure, 3.2 minutes).
+The folder failure revealed native select text extending the WebKit dialog's
+scrollable width. Scoped grid/control constraints fixed this; all six import/edit
+checks passed in 2.2 minutes, and independent review inspected all 12 screenshots.
+
+The broader practice run passed 45 cases, with one transient feedback assertion
+failure and eight Chromium-only transport-latency skips, in 12.6 minutes. All six
+corrected primary-meaning checks passed in the device matrix. The final cache and
+HTTPS run passed 14 cases in 1.8 minutes, with four WebKit offline-emulation skips
+for the documented Playwright service-worker limitation. Real HTTP failures and
+queued-progress recovery passed on all six mobile configurations. No application
+routes were mocked. Simulated phone Chromium, phone WebKit and iPad WebKit covered
+portrait and landscape; the update checks also covered desktop Chromium/WebKit.
+Independent review inspected 54 affected-feature screenshots as well as the
+final folder screenshots. Physical iPhone/iPad execution remains unverified.
+
+The final Chromium standalone app-window check passed in 6.5 seconds at phone and
+tablet sizes in both orientations, with actual standalone display mode, trusted
+HTTPS, active service-worker control and muted browser output. Production PWA
+smoke checks passed all six mobile configurations in 6.6 seconds. The final
+production container matches the built image; index HTML, service worker and
+referenced JavaScript/CSS bytes match the files served over trusted Tailscale
+HTTPS port 3010. API and worker readiness passed. Protected-file verification
+confirmed all 962 previous-application files unchanged. Final generated-schema
+audits validated production (18,779 nodes, 21,783 edges) and disposable acceptance
+(8,623 nodes, 10,897 edges). All nine running project containers use project-local
+bind mounts, and every published Docker port is bound to loopback.
+
 ## Import and folder separation, 2026-09-29
 
 Ingestion saves unfiled lessons and source provenance. Folder renaming and filing
@@ -28,7 +102,7 @@ record elapsed time and every skip reason. The warmed matrix targets 20 minutes.
 | --- | --- |
 | Corpus and ontology | Exact-spelling identity, canonical families, separate meanings, deduplication, source offsets, generated OML constraints, invalid-write rollback and guarded agent mutations. |
 | Imports and Ichiran | Real job progress and recovery; unchanged upstream segmentation and conjugation analysis; dictionary-only import without model inference; Latin text preserved without standalone vocabulary. |
-| Reader and language actions | Continuous text, base-form details and pronunciation, atomic New-to-Learning in both areas, retained Familiar/Known statuses, lazy cached sentence actions, and temporary phrase translation/audio without persistent corpus or media records. |
+| Reader and language actions | Continuous text, base-form details and pronunciation, atomic New-to-Learning for the shared family status, retained Familiar/Known statuses, lazy cached sentence actions, and temporary phrase translation/audio without persistent corpus or media records. |
 | Overlays and selection | Shared word/phrase overlay, mouse and touch selection, copy controls, focus retention, background scroll lock, conditional touch dismissal, unchanged desktop reader geometry and nonzero safe-area insets. |
 | Persistence and practice | Stable settings saves, viewport bookmarks independent of furthest progress, no progress from open/restore/close, acknowledged offline progress recovery, completion preview/confirmation, and finite lesson-specific practice, immediate sentence controls, lazy queued audio, reordering and optional answer hints. |
 | Operations and PWA | Trusted HTTPS, service-worker registration/update, cached reading, real outage recovery, backup/restore, retokenization preservation and idempotence, and isolated project-local storage. |

@@ -139,9 +139,10 @@ test('matching offers the primary dictionary meaning for 最後',async({page,req
   if(base==='最後'){
    await expect(answer).toHaveText('end; conclusion');
    await page.screenshot({path:info.outputPath('last-primary-meaning.png')});
-   await answer.click();await expect(page.locator('.practice-feedback')).toContainText('Correct');return;
   }
-  await answer.click();await expect(page.locator('.practice-feedback')).toContainText('Correct');
+  const feedback=page.waitForFunction(()=>document.querySelector('.practice-feedback.correct')?.textContent?.startsWith('Correct'),undefined,{polling:'raf'});
+  await answer.tap();await feedback;
+  if(base==='最後')return;
   await expect(page.locator('[data-challenge]')).not.toHaveAttribute('data-challenge',challenge!);
  }
  throw new Error('The lesson did not present 最後 during its first practice cycle');
