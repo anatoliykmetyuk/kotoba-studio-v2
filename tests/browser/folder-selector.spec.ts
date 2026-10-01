@@ -71,7 +71,7 @@ test('filing survives closing and reloading a queued import, including an immedi
   const response=page.waitForResponse(r=>r.url().endsWith('/api/v1/imports')&&r.request().method()==='POST');
   await dialog.evaluate(element=>{element.querySelector('form')!.requestSubmit();element.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click()});
   const result=await(await response).json();expect(result.jobId).toBeTruthy();await expect(dialog).toHaveCount(0);
-  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('kotoba:import-filing')??'[]').length)).toBe(1);
+  await expect.poll(()=>page.evaluate(()=>Array.from({length:localStorage.length},(_,index)=>localStorage.key(index)).filter(key=>key?.startsWith('kotoba:import-filing:')).length)).toBe(1);
   await page.reload();await expect(page.getByRole('heading',{name:'Library',exact:true})).toBeVisible();resumeWorker();
   const textId=await savedText(request,result);await expect.poll(()=>foldersOf(request,textId)).toEqual([first.id]);expect(new URL(page.url()).hash).toBe('');
   const duplicate=await openImport(page,second,title);await duplicate.getByLabel('Japanese text',{exact:true}).fill(body);
@@ -86,7 +86,7 @@ for(const storageFailure of [false,true])test(storageFailure?'readable browser s
  try{
   if(storageFailure)await page.addInitScript(()=>{
    localStorage.setItem('kotoba:import-filing','[]');const write=Storage.prototype.setItem;
-   Storage.prototype.setItem=function(key,value){if(key==='kotoba:import-filing')throw new DOMException('Fixture quota exceeded','QuotaExceededError');return write.call(this,key,value)};
+   Storage.prototype.setItem=function(key,value){if(key==='kotoba:import-filing'||key.startsWith('kotoba:import-filing:'))throw new DOMException('Fixture quota exceeded','QuotaExceededError');return write.call(this,key,value)};
   });
   await page.goto('/');resumeWorker=await pauseAcceptanceWorker();const dialog=await openImport(page,folder);
   const response=page.waitForResponse(r=>r.url().endsWith('/api/v1/imports')&&r.request().method()==='POST');await dialog.getByRole('button',{name:'Import & read',exact:true}).click();const result=await(await response).json();
@@ -110,4 +110,35 @@ test('Library Retry resumes a failed import and automatically completes its pend
   const retryResponse=page.waitForResponse(r=>r.url().endsWith('/api/v1/jobs/'+result.jobId+'/retry')&&r.request().method()==='POST');await page.locator('.job-card').filter({hasText:title}).getByRole('button',{name:'Retry',exact:true}).click();expect((await retryResponse).ok()).toBe(true);
   resumeWorker();const textId=await savedText(request,result);await expect.poll(()=>foldersOf(request,textId)).toEqual([folder.id]);await expect(waiting).toHaveCount(0);
  }finally{resumeWorker();await deleteFolder(request,folder)}
+});
+
+test('two service-worker-controlled tabs retain both accepted folder assignments before storage events and after reload',async({page,context,request,baseURL},info)=>{
+ expect(new URL(baseURL!).protocol).toBe('https:');
+ const first=await createFolder(request),second=await createFolder(request),other=await context.newPage();let resumeWorker:()=>void=()=>{};
+ try{
+  for(const tab of [page,other]){
+   // Delay cross-tab delivery deterministically while each independent tab
+   // accepts an import. The actual localStorage and network stay unmodified.
+   await tab.addInitScript(()=>window.addEventListener('storage',event=>{if(event.key?.startsWith('kotoba:import-filing'))event.stopImmediatePropagation()},true));
+   await tab.goto('/');expect(await tab.evaluate(()=>isSecureContext)).toBe(true);await tab.evaluate(()=>navigator.serviceWorker.ready);await tab.reload();
+   await expect.poll(()=>tab.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true);
+  }
+  resumeWorker=await pauseAcceptanceWorker();
+  const firstDialog=await openImport(page,first),secondDialog=await openImport(other,second);
+  const submit=async(tab:Page,dialog:ReturnType<Page['getByRole']>)=>{
+   const response=tab.waitForResponse(r=>r.url().endsWith('/api/v1/imports')&&r.request().method()==='POST');
+   await dialog.evaluate(element=>{element.querySelector('form')!.requestSubmit();element.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click()});
+   return (await response).json() as Promise<{jobId:string}>;
+  };
+  const results=await Promise.all([submit(page,firstDialog),submit(other,secondDialog)]);
+  for(const result of results)expect(result.jobId).toBeTruthy();
+  await expect.poll(()=>page.evaluate(()=>Array.from({length:localStorage.length},(_,index)=>localStorage.key(index)).filter(key=>key?.startsWith('kotoba:import-filing:')).length)).toBe(2);
+  await Promise.all([page.reload(),other.reload()]);resumeWorker();
+  const textIds=await Promise.all(results.map(result=>savedText(request,result)));
+  await expect.poll(()=>foldersOf(request,textIds[0])).toEqual([first.id]);await expect.poll(()=>foldersOf(request,textIds[1])).toEqual([second.id]);
+  for(const [index,tab] of [page,other].entries()){
+   expect(new URL(tab.url()).hash).toBe('');await expect(tab.getByRole('alert').filter({hasText:'Folder assignment failed.'})).toHaveCount(0);
+   expect(await tab.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await tab.screenshot({path:info.outputPath('concurrent-filing-tab-'+index+'.png')});
+  }
+ }finally{resumeWorker();await other.close();await deleteFolder(request,first);await deleteFolder(request,second)}
 });

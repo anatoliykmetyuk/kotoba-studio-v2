@@ -2,26 +2,10 @@ import {useEffect,useRef,useSyncExternalStore} from 'react';
 import {useQuery,useQueries,useQueryClient} from '@tanstack/react-query';
 import {api,type Job} from './api';
 
-export type ExistingFolder={id:string;name:string};
-type Filing={id:string;folder:ExistingFolder;jobId?:string;textId?:string;error?:string};
-const storageKey='kotoba:import-filing';
-const listeners=new Set<()=>void>();
-function readQueue():Filing[]|null{
- try{
-  const value:unknown=JSON.parse(localStorage.getItem(storageKey)??'[]');
-  return Array.isArray(value)?value.filter((f):f is Filing=>!!f&&typeof f.id==='string'&&typeof f.folder?.id==='string'&&typeof f.folder?.name==='string'&&(typeof f.jobId==='string'||typeof f.textId==='string')&&(f.error===undefined||typeof f.error==='string')).map(f=>f.textId?f:{...f,error:undefined}):[];
- }catch{return null}
-}
-let queue=readQueue()??[];
-function update(change:(current:Filing[])=>Filing[]){
- // Browser storage can remain readable while writes fail (for example quota).
- // The current tab's queue must retain its newer in-memory state in that case.
- queue=change(queue);
- try{localStorage.setItem(storageKey,JSON.stringify(queue))}catch{/* Keep the current session retryable when browser storage is unavailable. */}
- for(const listener of listeners)listener();
-}
-function subscribe(listener:()=>void){listeners.add(listener);return()=>{listeners.delete(listener)}}
-const snapshot=()=>queue;
+import {createFilingStore,type ExistingFolder} from './import-filing-store';
+export type {ExistingFolder} from './import-filing-store';
+let browserStorage:Storage|null=null;try{browserStorage=localStorage}catch{}
+const {getSnapshot:snapshot,subscribe,update,sync}=createFilingStore(browserStorage);
 
 /** Accepted imports are durable before this independent organization action. */
 export function scheduleImportFiling(result:{textId?:string;jobId?:string},folder:ExistingFolder|null){
@@ -42,7 +26,6 @@ export function ImportFiling(){
  const running=useRef(new Map<string,AbortController>());
  const jobs=useQueries({queries:requests.map(request=>({queryKey:['job',request.jobId],queryFn:({signal}:{signal:AbortSignal})=>api<Job>('/jobs/'+request.jobId,undefined,undefined,{signal}),enabled:!!request.jobId&&!request.textId,refetchInterval:(query:{state:{data?:Job}})=>query.state.data?.state==='ready'?false:1000}))});
  useEffect(()=>{
-  const sync=(event:StorageEvent)=>{if(event.key!==storageKey&&event.key!==null)return;queue=readQueue()??queue;for(const listener of listeners)listener()};
   window.addEventListener('storage',sync);
   return()=>{window.removeEventListener('storage',sync);for(const controller of running.current.values())controller.abort();running.current.clear()};
  },[]);
