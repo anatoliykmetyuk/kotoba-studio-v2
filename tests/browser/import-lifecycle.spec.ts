@@ -20,7 +20,7 @@ async function submitImport(page:Page,title:string,body:string){
  const dialog=page.getByRole('dialog',{name:'Import text',exact:true});
  await dialog.getByRole('textbox',{name:'Title',exact:true}).fill(title);
  await dialog.getByRole('textbox',{name:'Japanese text',exact:true}).fill(body);
- await dialog.getByLabel('Folder',{exact:true}).fill('Acceptance');
+ await dialog.getByRole('combobox',{name:'Folder',exact:true}).selectOption('');
  const response=page.waitForResponse(r=>r.url().endsWith('/api/v1/imports')&&r.request().method()==='POST');
  await dialog.getByRole('button',{name:'Import & read',exact:true}).click();
  const accepted=await response;expect(accepted.ok()).toBe(true);
@@ -81,14 +81,14 @@ test('active imports navigate, metadata edits reuse the text, and body edits cre
  await page.getByRole('button',{name:'Edit text',exact:true}).click();
  const edit=page.getByRole('dialog',{name:'Edit text',exact:true}),editedTitle=title+' edited';
  await edit.getByRole('textbox',{name:'Title',exact:true}).fill(editedTitle);
- await edit.getByLabel('Folder',{exact:true}).fill('Import lifecycle');
+ await edit.getByRole('combobox',{name:'Folder',exact:true}).selectOption('');
  await edit.getByRole('textbox',{name:'Source link optional',exact:true}).fill('https://example.com/import-lifecycle');
  const metadataResponse=page.waitForResponse(r=>r.url().endsWith('/api/v1/imports')&&r.request().method()==='POST');
  await edit.getByRole('button',{name:'Save revision',exact:true}).click();
  expect((await(await metadataResponse).json()).textId).toBe(completed.result.textId);
  await expect(edit).toHaveCount(0);await expect(page.locator('.reader-heading h1')).toHaveText(editedTitle);
  const saved=await(await request.get('/api/v1/texts/'+completed.result.textId)).json() as TextItem;
- expect(saved.body).toBe(body);const library=await(await request.get('/api/v1/texts')).json() as TextItem[];expect(library.find(text=>text.id===saved.id)?.folders?.some(folder=>folder.name==='Import lifecycle')).toBe(true);
+ expect(saved.body).toBe(body);const library=await(await request.get('/api/v1/texts')).json() as TextItem[];expect(library.find(text=>text.id===saved.id)?.folders).toEqual([]);
  expect(saved.sources.some(source=>source.url==='https://example.com/import-lifecycle')).toBe(true);
  await page.getByRole('button',{name:'Text options',exact:true}).click();await page.getByRole('button',{name:'Edit text',exact:true}).click();
  const revisedBody=body+'\n犬は庭を歩きます。';
