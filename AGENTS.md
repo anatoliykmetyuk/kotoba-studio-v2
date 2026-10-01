@@ -14,6 +14,8 @@ OML in `ontology/` is the authoritative graph schema. Use official OML tooling a
 ## Verification
 Use shared isolated fixtures. Prove domain behavior in unit/integration tests and actual service boundaries in real-stack tests. No route mocks in final acceptance. Verify mobile Chromium, phone WebKit, and iPad WebKit over the actual Tailscale origin, in portrait and landscape. Inspect screenshots as well as automated layout and interaction assertions. Test recovery, persistence, speech, schema enforcement, and agent operations. Record timings; the warmed acceptance matrix targets 20 minutes. Do not assign manual verification to the user.
 
+Mute browser audio before running any browser tests, including additional tabs, mobile/iPad contexts, and standalone PWA windows. Keep output muted throughout testing while still verifying actual media playback.
+
 ## Reader design and review budget
 The reader should feel like an e-book: continuous paragraphs, modest default type, compact paragraph spacing, and no per-sentence toolbars or “read to here” controls. Font size and line spacing must be configurable under reader options and persist across devices. Progress saves automatically. Put sentence meaning/audio in the selected-word context panel.
 
