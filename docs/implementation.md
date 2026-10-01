@@ -17,8 +17,11 @@ A Word has a stable UUID and unique exact spelling. Meanings are separate nodes
 with source provenance, including multiple dictionary alternatives. Every Word
 links to a canonical base Word, which links to itself. One Learning Status
 belongs to that base and is shared by all its forms. Migrate existing Listening
-and Reading statuses by taking the lower of New, Learning, Familiar and Known. Sentence text
-deduplicates; per-Text placements and token occurrences retain original offsets.
+and Reading statuses by taking the lower of New, Learning, Familiar and Known.
+Display the Word's meanings together on click; never create separate Words for
+different meanings of the same spelling. Learning Status has one control and no
+area filters. Sentence text deduplicates; per-Text placements and token
+occurrences retain original offsets.
 Identical content and identities deduplicate. Texts independently track New or
 Completed and their furthest reading position.
 
@@ -36,13 +39,15 @@ import preflight before any lesson work. The broader ontology refactor is deferr
 Library order is creation time, newest first; reading and organization edits do
 not move older lessons ahead of newer imports.
 
-There is no Writing functionality, journal migration, daily target, point,
-streak or related goal-system record.
+There is no Writing functionality or journal migration. Daily targets, goals,
+points, streaks, their UI and schema fields, and migrated goal-system records
+are excluded. Ordinary reading progress and learning status remain.
 
 ## Imports and language actions
 
-All imports use the predefined API and inspectable jobs. Report actual stage,
-counts, percentage, elapsed time, ETA when measurable, heartbeat age and errors.
+Agents import through `POST /api/v1/imports` and inspect
+`GET /api/v1/jobs/{id}`. Report actual stage counts, percentage, elapsed time,
+ETA when measurable, heartbeat age, and stalled/error information.
 Imports use local Ichiran and dictionary lookup only, without model inference,
 sentence translation or speech generation. English/Latin runs remain in source
 text and phrase selection but never become standalone vocabulary.
@@ -50,45 +55,83 @@ text and phrase selection but never become standalone vocabulary.
 Use unchanged upstream Ichiran boundaries, candidates and conjugation metadata.
 Do not add custom splitting, merging or grammar rules. The approved fallback
 retains upstream grouping when no suitable configuration exists and displays its
-canonical base in the popup. Report observed upstream limitations.
+canonical base in the popup. Grouping ても is not a requirement. Preserve whole
+inflected forms and exact source offsets, linked to their canonical bases.
+Report observed upstream limitations.
 
 Word details read stored Meaning nodes. Missing meanings consult the dictionary
 first and use the local model only when no entry exists; save that fallback in
 the graph. Never use a model to choose among dictionary alternatives. Sentence
 translations and ordinary pronunciation are requested lazily and cached. A
-selected phrase instead generates fresh temporary translation and speech, with
-no persistent corpus or media entry.
+selected phrase instead generates fresh temporary local translation and speech,
+with no persistent corpus or media entry.
 
 ## Reading and interaction
 
-The reader uses continuous paragraphs, modest configurable type and line
-spacing, and automatic position saving. Opening, restoring or closing a lesson
-must not advance progress. A device-local viewport bookmark is independent of
-monotonic furthest-read progress. Explicit offline progress queues until the
-server acknowledges it.
+The reader should feel like an e-book, with continuous paragraphs, modest default
+type, compact paragraph spacing, and no per-sentence toolbars or “read to here”
+controls. Font size and line spacing are configurable under reader options and
+persist across devices. Reading progress saves automatically. Put sentence
+meaning and audio in the selected-word context panel. Opening, restoring or
+closing a lesson must not advance progress. A device-local viewport bookmark is independent of
+monotonic furthest-read progress. Restore server-only progress at the same
+viewport line used when saving it. Popup scroll locks, layout changes, and stale
+query responses must not create reading activity. Explicit offline progress
+queues until the server acknowledges it.
 
-A word tap opens its canonical base, automatically pronounces it, and promotes
-New to Learning without downgrading Familiar or Known. Show the first three dictionary meanings with an expansion
-control. New, Learning and Familiar have distinct highlights; Known and Latin
-text are unhighlighted. Latin text has no ordinary click action.
+A word tap opens its canonical base, meanings, and family details, automatically
+pronounces the base, and atomically promotes New to Learning without downgrading
+Familiar or Known. Show the first three dictionary meanings with an explicit
+expansion control. New, Learning and Familiar have distinct background highlights;
+Known and Latin text are unhighlighted. Latin text has no ordinary click action.
 
-Word and phrase popups share one responsive overlay component. Desktop overlays
-must preserve reader geometry. Mobile dismissal accepts a downward touch gesture
-only when it starts at the scroll top; otherwise the complete gesture scrolls.
-Mouse dragging never dismisses a popup. Close controls accept mouse, touch, pen
-and keyboard input; a completed touch gesture must not block a subsequent pen tap.
-Clicking or tapping the backdrop dismisses the overlay without activating lesson
-content behind it. Lock background scrolling, retain keyboard focus and preserve
-safe areas. Settings sliders have 44px targets and stable
-hold/release behavior; serialized saves preserve newer edits and allow retry.
+Word and selected-phrase popups share the same `ReadingDetails` component,
+heading/playback/copy controls, scroll container, and responsive overlay shell.
+Word details are overlays at every viewport size. Wide-screen overlays open from
+the right without changing reader width, token positions, or reading progress;
+never restore a layout column for the panel. Lock background scrolling, retain
+modal keyboard focus, and restore the original reading position on close.
 
-Mouse drag or finger/Pencil long-press drag selects a phrase. Holding a single
-token and releasing also keeps its anchor selected for a later endpoint tap.
-Support both gestures without a toolbar mode button or native OS text selection. Phrase output is read-only, with automatic translation,
-autoplay and the ordinary speaker icon. No Save or Translate again control.
+Popup dismissal gestures accept touch input only. Hide the drag handle with a
+fine mouse pointer. A downward touch swipe anywhere on a popup dismisses it only if the
+gesture starts at the topmost scroll position. When it begins in scrolled content,
+the entire gesture scrolls without dismissal, even if it reaches the top.
+Sliders retain their own drag gestures. Popup scrolling must never scroll the
+underlying lesson. Mouse dragging never dismisses a popup.
+
+Every popup button, including close, copy, and pronunciation, accepts mouse,
+finger, Apple Pencil, and keyboard input, including after touch scrolling or a
+canceled swipe. Clicking or tapping the backdrop dismisses word and phrase
+popups on desktop and iPad without activating content behind them; dragging
+does not dismiss them. Use one application-wide activation abstraction for
+mouse, finger, pen, and keyboard equivalence. Components use semantic controls
+and ordinary click/change handlers, without component-specific Pencil workarounds.
+The shared adapter covers native actions; scrolling, text input, range dragging,
+and token selection retain their native or dedicated gesture ownership.
+
+Sticky reader controls remain below the top device safe area after scrolling.
+Reserve side cutouts after rotation and keep popup controls in the safe viewport.
+Verify nonzero safe-area insets, because browser presets alone report zero.
+Reader settings sliders have 44px targets and stable values while holding and
+releasing. Serialized saves must not roll back newer local edits and allow retry.
+
+Mouse drag or finger/Pencil long-press drag selects contiguous tokens across
+lines and sentences as a phrase. Holding a single token and releasing also keeps
+its anchor selected for a later endpoint tap.
+Support both gestures without a Select phrase toolbar button. Disable native OS
+selection and callouts only in the reader. Phrase selection must not promote
+learning status or pronounce individual tokens. Opening the selected phrase
+automatically generates one read-only translation and starts speech in the
+selection gesture. The popup contains only the selected text, translation/loading/
+error text, close control, and the same speaker icon used for word pronunciation.
+Never add editable translation fields, Save phrase, or Translate again controls.
 Icon-only copy actions copy the source word/phrase and the word's contextual
-sentence. Example navigation highlights its destination briefly, then fades.
-Every visible label is factual and functional.
+sentence, without ruby annotations. Example navigation targets the exact
+placement and briefly highlights it yellow, then fades.
+Every visible label is strictly factual and functional. No marketing language,
+slogans, punchlines, motivational copy, decorative taglines, or congratulatory
+flourishes. Use direct labels, factual feedback, and only instructions needed to
+operate a feature; let the layout and controls explain themselves.
 
 ## Completion and lesson practice
 
@@ -99,31 +142,48 @@ remain unchanged. Reopening is status-neutral. Already completed lessons can
 explicitly mark remaining New words Known; deployment never does so implicitly.
 
 Practice is entered within a lesson, with questions and distractors from that
-Text only. Answer APIs validate membership. Practice includes Learning and Familiar words by default. New and Known words
+Text only, and provides a return to the lesson. Answer APIs validate membership.
+Practice includes Learning and Familiar words by default. New and Known words
 are excluded from its questions; there is no Include all statuses control.
-Sentence reconstruction retains every token in an eligible sentence. Matching shuffles answers and
-alternatives every challenge. Correct feedback advances automatically. Sentence
+Sentence reconstruction retains every token in an eligible sentence. Use the
+same deterministic stored dictionary ordering as word details for matching
+answers, never graph relationship traversal order. Matching freshly shuffles
+choices and distractors every challenge. Correct feedback is short and advances
+automatically, showing the next sentence challenge immediately. Sentence
 reconstruction displays its tokens and controls immediately, with a placeholder
-while its English translation generates. Audio is lazy on click, and token
-placement never waits for it. Token pronunciations queue
-in click order and stop when advancing. Placed tokens can be reordered by drag.
-Each run randomly selects at most five word questions and five sentence questions.
+while its English translation generates, then replaces the placeholder in place.
+Never show a full preparation screen. Translation preparation reports elapsed
+time, supports cancellation and bounded retry, and rechecks pending jobs when
+the app returns to the foreground. Never prepare audio before showing the
+challenge or block tokens and controls on translation. Audio is lazy on click;
+token placement and reordering never wait for it. Generate or reuse cached sentence
+and token speech only when clicked. Token pronunciations play sequentially in a
+separate queue in click order and stop when advancing. Placed tokens support
+drag-to-reorder through a shared component and ordinary tap activation.
+Cached speech requests are read-only indexed lookups without a graph-wide audit.
+Each run randomly selects at most five word questions and five sentence questions,
+without repeating questions within either sample.
 It shows the question number and capped total, then offers Practice again to draw
 a fresh random sample. Smaller lessons use only their available questions.
+Incorrect attempts stay on the current question. After the last correct answer,
+show completion and an explicit Practice again action.
 Incorrect sentence answers offer an optional Show correct sentence disclosure;
-the correct sentence stays hidden until explicitly opened. No global Practice menu.
+the correct sentence stays hidden until explicitly opened. Reset its visibility
+for every attempt and challenge. No global Practice menu or corpus-wide question pool.
 
-Settings exposes manual app-update checks with explicit results and a separate
-Reload to update action for a ready update. The banner shares this state. Checks
-and updates preserve the open session until the user chooses to reload.
+Settings provides Check for updates with explicit checking, current, and failure
+results. Show a separate Reload to update action only when an update is ready.
+The existing banner shares this state, and failed checks remain retryable.
+Never reload automatically while the user is reading. Checks and updates preserve
+the open session until the user chooses to reload.
 
 ## Agents and operations
 
-`AGENTS.md`, `.agents/skills/kotoba-graph/SKILL.md`, OpenAPI, the JSON CLI and OML
-are shipped project features. Agents import, inspect jobs, query the graph, edit
+`AGENTS.md`, the `kotoba-development` and `kotoba-graph` skills, OpenAPI, the JSON
+CLI and OML are shipped project features. Agents import, inspect jobs, query the graph, edit
 statuses and folders, correct families, and perform validated transactions through
 the API. Generic mutations support dry runs and revisions. Schema administration,
-backup/restore and maintenance operations are documented in the skill.
+backup/restore and maintenance operations are documented in `kotoba-graph`.
 
 Existing-corpus retokenization is a reviewable job followed by a fingerprint-
 guarded atomic apply with a backup. Preserve Text IDs, original content, cursors,
@@ -146,17 +206,8 @@ backups or private development history.
 
 ## Verification and delivery
 
-Use isolated real services and synthetic fixtures. Test mobile Chromium, phone
-WebKit and iPad WebKit in both orientations over trusted Tailscale HTTPS, plus
-wide desktop overlays. Verify actual media progression, gestures, persistence,
-nonzero safe-area insets, service-worker updates and real outage recovery. Inspect
-screenshots. State browser-emulation and physical-device limitations accurately.
-Browser acceptance runs silently, including additional tabs and standalone app
-windows. Tests retain native decoding, playback progression and ended events and
-verify that generated audio contains a signal.
-
-Fresh-context reviewers examine correctness, architecture, ontology/database
-practice and query efficiency at important checkpoints. Keep review and optional
-refactoring within 20% of effort. Continue until requested implementation,
-verification and deployment are complete. See `docs/acceptance.md` for recorded
-release evidence and `README.md` for setup and system requirements.
+Permanent workflow requirements are in [AGENTS.md](../AGENTS.md). Implementation,
+independent review, verification, and delivery procedures are in
+[kotoba-development](../.agents/skills/kotoba-development/SKILL.md).
+See [acceptance evidence](acceptance.md) for recorded release results and
+[README.md](../README.md) for setup and system requirements.

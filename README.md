@@ -99,7 +99,9 @@ To restore an application backup, use `./kotoba restore data/backups/before-chan
 
 Agent access is a supported project feature. These files are included in version control:
 
-- [AGENTS.md](AGENTS.md): project constraints and workflow instructions.
+- [AGENTS.md](AGENTS.md): permanent project constraints and required workflow.
+- [Development skill](.agents/skills/kotoba-development/SKILL.md): implementation, independent agent reviews, parallel worktrees, device verification, and delivery procedures.
+- [Implementation contract](docs/implementation.md): accepted product behavior and architectural details.
 - [Database-management skill](.agents/skills/kotoba-graph/SKILL.md): imports, progress inspection, graph queries and changes, learning statuses, lazy language actions, backups, and migrations.
 - [Graph operations](docs/graph-operations.md) and [OpenAPI contract](docs/openapi.json).
 - [OML ontology](ontology/src/) and its [database mapping](ontology/README.md).
