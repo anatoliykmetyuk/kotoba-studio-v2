@@ -1,5 +1,29 @@
 # Release acceptance
 
+## Import dialog scrolling, 2026-10-02
+
+The swipe-dismiss handler now proxies only the popup's main scroll surface.
+A focused, scrolled textarea no longer captures gestures on form labels or
+gaps. Textarea scrolling and selection retain native ownership, while word
+popup header scrolling and settings dismissal retain their existing behavior.
+
+The regression reproduced against the previous acceptance build. The final
+import and settings checks passed all 12 cases across phone Chromium, phone
+WebKit and iPad WebKit in portrait and landscape in 1.1 minutes over trusted
+Tailscale HTTPS. Import checks include nonzero simulated safe-area offsets and
+short viewports. A real Chromium standalone app window passed independent form
+scrolling at phone and tablet widths in 4.0 seconds with an active service
+worker. Browser output remained muted and screenshots were inspected.
+
+Chromium checks use trusted touch input; WebKit checks prove handler ownership
+using DOM touch events, without claiming native Safari panning or physical-device
+verification. Independent review found no remaining notable recommendations.
+Frontend type/build checks and all 962 protected-file checksums passed.
+Production on trusted HTTPS port 3010 serves the same verified assets as
+acceptance, reports ready, and passed Chromium/WebKit phone import smoke checks
+in 5.6 seconds without submitting imports.
+Evidence remains in ignored `.runtime/import-scroll/` storage.
+
 ## Obsidian task fixes, 2026-10-01
 
 Furigana covers kanji only, using conservative kana alignment without altering

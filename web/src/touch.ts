@@ -13,8 +13,12 @@ export function useSwipeDismiss(ref:RefObject<HTMLElement|null>,close:()=>void,m
    const origin=target instanceof Element?target:null;if(!origin)return;
    // Sliders retain their own gestures. A sheet already scrolled away from
    // the top must scroll back first; never switch to dismissal mid-gesture.
-   if(origin.closest('input[type="range"]'))return;
-   const scrolled=[el,...el.querySelectorAll<HTMLElement>('*')].find(node=>node.scrollTop>1&&node.scrollHeight>node.clientHeight+1);
+   // Text areas own their scrolling/selection, even at the top.
+   if(origin.closest('input[type="range"],textarea'))return;
+   // Only the popup's main scroll surface can proxy a header/handle gesture.
+   // An independently scrolled textarea must never capture drags on the form.
+   const surface=el.querySelector<HTMLElement>('[data-popup-scroll]')??el;
+   const scrolled=surface.scrollTop>1&&surface.scrollHeight>surface.clientHeight+1?surface:undefined;
    const proxy=scrolled&&!scrolled.contains(origin)?scrolled:undefined;
    start={x,y,direction:scrolled?'scroll':'pending',proxy,scrollTop:proxy?.scrollTop};
   };

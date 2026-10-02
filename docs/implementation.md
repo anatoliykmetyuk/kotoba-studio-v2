@@ -98,6 +98,10 @@ gesture starts at the topmost scroll position. When it begins in scrolled conten
 the entire gesture scrolls without dismissal, even if it reaches the top.
 Sliders retain their own drag gestures. Popup scrolling must never scroll the
 underlying lesson. Mouse dragging never dismisses a popup.
+Text areas retain their own scrolling and selection gestures.
+In import forms, swipes inside the text area scroll its contents; swipes on
+labels or gaps outside it scroll the dialog, regardless of text-area focus or
+scroll position. Only the popup's main scroll surface proxies header gestures.
 
 Every popup button, including close, copy, and pronunciation, accepts mouse,
 finger, Apple Pencil, and keyboard input, including after touch scrolling or a
