@@ -2,7 +2,29 @@
 import argparse,json,os,signal,subprocess,sys,time,secrets
 from pathlib import Path
 import httpx
+from urllib.parse import urlsplit
 ROOT=Path(__file__).resolve().parents[1]
+
+def app_urls(url,public_url=None):
+ """Report the selected endpoint and Serve routes proxying that endpoint."""
+ urls=[url.rstrip('/')]
+ if public_url and public_url.rstrip('/') not in urls:urls.append(public_url.rstrip('/'))
+ target=urlsplit(url)
+ if target.scheme!='http' or target.hostname not in ('localhost','127.0.0.1','::1'):return urls
+ try:
+  proc=subprocess.run(['tailscale','serve','status','--json'],capture_output=True,text=True,check=True,timeout=5)
+  config=json.loads(proc.stdout)
+  for address,site in config.get('Web',{}).items():
+   endpoint=urlsplit('https://'+address)
+   if not config.get('TCP',{}).get(str(endpoint.port or 443),{}).get('HTTPS'):continue
+   proxy=urlsplit(site.get('Handlers',{}).get('/',{}).get('Proxy',''))
+   if (proxy.scheme==target.scheme and proxy.hostname in ('localhost','127.0.0.1','::1')
+       and (proxy.port or 80)==(target.port or 80) and proxy.path.rstrip('/')==target.path.rstrip('/')):
+    candidate='https://'+address
+    if candidate not in urls:urls.append(candidate)
+ except (OSError,subprocess.SubprocessError,ValueError,TypeError,AttributeError):
+  pass # Optional Tailscale discovery must not prevent health reporting.
+ return urls
 
 def environment(name):
  runtime=ROOT/'.runtime'/name;runtime.mkdir(parents=True,exist_ok=True);path=runtime/'environment.json'
@@ -86,7 +108,7 @@ def main():
   start_worker(a.environment);result={'url':env.get('KOTOBA_PUBLIC_URL',url),'environment':a.environment}
  elif a.command=='stop':stop_worker(a.environment);compose(a.environment,['stop']);result={'stopped':a.environment}
  elif a.command=='worker-restart':start_worker(a.environment);result={'worker':'restarted'}
- elif a.command=='status':result=call(url,'/health')
+ elif a.command=='status':result=call(url,'/health')|{'urls':app_urls(url,env.get('KOTOBA_PUBLIC_URL') if not a.url else None)}
  elif a.command=='schema':result=call(url,'/schema')
  elif a.command=='audit':result=call(url,'/graph/audit')
  elif a.command=='query':result=call(url,'/graph/query',{'query':a.cypher,'params':json.loads(a.params)})

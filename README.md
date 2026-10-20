@@ -52,6 +52,8 @@ ollama pull qwen3.5:9b-mlx
 
 `start` builds and starts Neo4j, the API, the web server, the shared Ichiran dictionary service, and the native inference worker. The first Ichiran start downloads and verifies a dictionary snapshot and restores several gigabytes of PostgreSQL data; allow several minutes. Later starts reuse those files. Details and pinned versions are in [services/ichiran](services/ichiran/README.md).
 
+`status` prints health data plus a `urls` list containing the selected HTTP endpoint, any configured public URL, and trusted HTTPS URLs from active Tailscale Serve routes targeting that endpoint. Tailscale discovery is optional; health reporting still works when Tailscale is unavailable.
+
 Open **http://127.0.0.1:3010** on the Mac. A fresh installation has an empty library. Use **Import text** to add Japanese content you supply. Clicking a New word promotes it to Learning. Completing a lesson previews the number of remaining New word families and marks them Known after confirmation. Practice is available within each lesson for Learning and Familiar words.
 
 ## Mobile access and PWA installation
