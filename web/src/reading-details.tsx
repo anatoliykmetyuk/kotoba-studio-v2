@@ -6,8 +6,8 @@ import {usePopupScrollLock} from './popup-scroll-lock';
 import {CopyButton} from './copy-button';
 
 /** The same overlay, heading and playback control for a word or selected phrase. */
-export function ReadingDetails({label,closeLabel,text,reading,textClass,copyLabel,pronounceLabel,speak,busy,close,children}:{
- label:string;closeLabel:string;text:string;reading?:string;textClass?:string;copyLabel:string;
+export function ReadingDetails({label,closeLabel,text,reading,textClass,textSize,copyLabel,pronounceLabel,speak,busy,close,children}:{
+ label:string;closeLabel:string;text:string;reading?:string;textClass?:string;textSize?:number;copyLabel:string;
  pronounceLabel:string;speak:()=>Promise<void>;busy:boolean;close:()=>void;children:ReactNode;
 }){
  const ref=useRef<HTMLElement>(null);const drag=useSwipeDismiss(ref,close);usePopupScrollLock(ref);
@@ -37,6 +37,6 @@ export function ReadingDetails({label,closeLabel,text,reading,textClass,copyLabe
  <aside ref={ref} style={{transform:drag?`translateY(${drag}px)`:undefined}} tabIndex={-1} className="word-panel" role="dialog" aria-modal="true" aria-label={label}>
   <div className="sheet-drag-area" role="button" tabIndex={0} aria-label="Drag down to close" onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();close()}}}><div className="sheet-handle"/></div>
   <div className="word-panel-head"><button className="icon-button" aria-label={closeLabel} title={closeLabel} onClick={close}><X size={20}/></button></div>
-  <div className="word-scroll" data-popup-scroll><div className="word-title"><CopyButton text={text} label={copyLabel}/><div>{reading&&<span className="word-reading" lang="ja">{reading}</span>}<h2 lang="ja" className={textClass}>{text}</h2></div><button className="icon-button" aria-label={pronounceLabel} title={pronounceLabel} onClick={()=>void speak()} disabled={busy}>{busy?<RefreshCw className="spin" size={21}/>:<Volume2 size={24}/>}</button></div>{children}</div>
+  <div className="word-scroll" data-popup-scroll><div className="word-title"><CopyButton text={text} label={copyLabel}/><div>{reading&&<span className="word-reading" lang="ja">{reading}</span>}<h2 lang="ja" className={textClass} style={{fontSize:textSize}}>{text}</h2></div><button className="icon-button" aria-label={pronounceLabel} title={pronounceLabel} onClick={()=>void speak()} disabled={busy}>{busy?<RefreshCw className="spin" size={21}/>:<Volume2 size={24}/>}</button></div>{children}</div>
  </aside></>,document.body);
 }

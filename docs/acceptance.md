@@ -1,5 +1,19 @@
 # Release acceptance
 
+## Phrase panel typography, 2026-10-22
+
+Selected Japanese phrase text now uses the current reader font size rather than
+inheriting the enlarged word-card heading. Individual token cards keep their
+existing typography. The frontend build and all 60 JavaScript tests passed.
+All eight selection-mode browser cases passed in 1.8 minutes across phone
+Chromium, phone WebKit, iPad WebKit (both orientations) and desktop Chromium and
+WebKit over trusted acceptance HTTPS. Both phrase-selection gestures assert
+computed font-size equality, with 20px and 26px reader settings. Screenshots were
+inspected; audio remained muted and application routes used real services.
+These are browser emulations, not physical-device tests. Independent review
+found no notable recommendations. Read-only production checks confirmed the
+served asset matches the verified build on trusted HTTPS port 3010.
+
 ## Optional lesson titles, 2026-10-22
 
 New lesson imports accept an omitted, empty, or whitespace-only title. The

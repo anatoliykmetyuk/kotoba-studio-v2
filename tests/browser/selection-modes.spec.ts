@@ -29,7 +29,7 @@ async function pointer(page:Page,browserName:string,input:Input){
 
 test('hold-release then endpoint tap and hold-drag both select a phrase',async({page,request,browserName},info)=>{
  await muteTestOutput(page);
- await request.patch('/api/v1/settings',{data:{fontSize:20,lineHeight:1.85}});
+ await request.patch('/api/v1/settings',{data:{fontSize:info.project.name.includes('landscape')?26:20,lineHeight:1.85}});
  const response=await request.post('/api/v1/imports',{data:{title:'Selection modes acceptance',body:'猫は窓のそばで眠っています。私は温かいお茶を飲みました。',folder:'Acceptance'}});
  expect(response.ok()).toBe(true);const submitted=await response.json();let id=submitted.textId;
  if(!id)await expect.poll(async()=>{const job=await(await request.get('/api/v1/jobs/'+submitted.jobId)).json();if(job.state==='failed')throw new Error(job.error);id=job.result.textId;return job.state},{timeout:60_000}).toBe('ready');
@@ -53,11 +53,13 @@ test('hold-release then endpoint tap and hold-drag both select a phrase',async({
    await expect(page.getByRole('dialog')).toHaveCount(0);expect(learns).toHaveLength(0);expect(translations).toHaveLength(inputs.indexOf(inputType)*2);expect(speech.filter(url=>!url.includes('/phrase-tools/'))).toHaveLength(0);
    if(inputType==='touch')await last.tap();else {await input.down(b);await input.up()}
    const phrase=page.getByRole('dialog',{name:'Selected phrase',exact:true});await expect(phrase).toBeVisible();await expect(phrase.locator('.phrase-japanese')).toHaveText(expected);
+   await expect(phrase.locator('.phrase-japanese')).toHaveCSS('font-size',await page.locator('.book-body').evaluate(el=>getComputedStyle(el).fontSize));
    await expect(phrase.locator('.phrase-translation')).toHaveAttribute('aria-busy','false',{timeout:90_000});
    await page.screenshot({path:info.outputPath(`${inputType}-hold-tap.png`)});
    await phrase.getByRole('button',{name:'Close',exact:true}).click();await expect(page.locator('.range-selected')).toHaveCount(0);
    await first.scrollIntoViewIfNeeded();await input.down(await center(first));await page.waitForTimeout(500);await input.move(await center(last));await input.up();
    await expect(phrase).toBeVisible();await expect(phrase.locator('.phrase-japanese')).toHaveText(expected);
+   await expect(phrase.locator('.phrase-japanese')).toHaveCSS('font-size',await page.locator('.book-body').evaluate(el=>getComputedStyle(el).fontSize));
    await expect(phrase.locator('.phrase-translation')).toHaveAttribute('aria-busy','false',{timeout:90_000});
    await phrase.getByRole('button',{name:'Close',exact:true}).click();
    // Escape cancels a held anchor, without learning or speaking the word.

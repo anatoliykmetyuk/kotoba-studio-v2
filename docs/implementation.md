@@ -69,7 +69,9 @@ first and use the local model only when no entry exists; save that fallback in
 the graph. Never use a model to choose among dictionary alternatives. Sentence
 translations and ordinary pronunciation are requested lazily and cached. A
 selected phrase instead generates fresh temporary local translation and speech,
-with no persistent corpus or media entry.
+with no persistent corpus or media entry. Selected phrase text in the translation
+panel uses the current reader font size; individual token cards retain their
+existing typography.
 
 ## Reading and interaction
 
