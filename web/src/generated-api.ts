@@ -867,7 +867,10 @@ export interface components {
         };
         /** Import */
         Import: {
-            /** Title */
+            /**
+             * Title
+             * @default
+             */
             title: string;
             /** Body */
             body: string;
@@ -903,7 +906,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "dictionary" | "saving";
+            stage: "title" | "dictionary" | "saving";
             /** Completed */
             completed: number;
             /** Total */

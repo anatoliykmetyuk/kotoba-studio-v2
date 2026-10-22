@@ -48,8 +48,13 @@ are excluded. Ordinary reading progress and learning status remain.
 Agents import through `POST /api/v1/imports` and inspect
 `GET /api/v1/jobs/{id}`. Report actual stage counts, percentage, elapsed time,
 ETA when measurable, heartbeat age, and stalled/error information.
-Imports use local Ichiran and dictionary lookup only, without model inference,
-sentence translation or speech generation. English/Latin runs remain in source
+The import title is optional. For a new lesson with an omitted, empty or
+whitespace-only title, the existing local model generates a short Japanese title
+(up to 30 characters) from at most the first 6,000 source characters. Invalid
+generation fails the retryable import without saving a partial lesson. Supplied
+titles and existing duplicate lesson titles are preserved.
+Text analysis uses local Ichiran and dictionary lookup only, without model
+inference, sentence translation or speech generation. English/Latin runs remain in source
 text and phrase selection but never become standalone vocabulary.
 
 Use unchanged upstream Ichiran boundaries, candidates and conjugation metadata.

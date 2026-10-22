@@ -2,7 +2,7 @@
 
 A local Japanese reading application with an OML ontology and a Neo4j knowledge graph. Import a lesson, tap words to see their base forms and meanings, select phrases by dragging, and practice the content of that lesson. One Learning Status is shared across a word's forms.
 
-Ichiran supplies tokenization and dictionary meanings without custom segmentation rules. Imports make no language-model calls. Sentence translation and pronunciation are generated on demand; a local language model supplies a saved word meaning only when the dictionary has no entry. The reader supports adjustable type and spacing, mobile touch controls, and installation as a PWA. Writing journals, daily targets, points, and streaks are absent.
+Ichiran supplies tokenization and dictionary meanings without custom segmentation rules. Imports use the local language model only to generate a short title when none is supplied. Sentence translation and pronunciation are generated on demand; a local language model supplies a saved word meaning only when the dictionary has no entry. The reader supports adjustable type and spacing, mobile touch controls, and installation as a PWA. Writing journals, daily targets, points, and streaks are absent.
 
 ## System requirements
 
@@ -117,7 +117,7 @@ Use predefined API actions instead of bypassing validation with direct database 
 ./kotoba query 'MATCH (t:Text) RETURN t.id, t.title LIMIT 20'
 ```
 
-`lesson.json` contains `title`, `body`, and optionally `sourceUrl`. New imports appear unfiled in All texts. Agents attach a lesson to a folder afterward through a separate graph transaction. Imports expose stage, processed/total sentence counts, percentage, elapsed time, estimated remaining time, and errors. The skill documents the rule: use an existing API for an action when available; otherwise execute graph queries through the validated transaction interface.
+`lesson.json` contains `body` and optionally `title` and `sourceUrl`. A blank or omitted title is generated as a short Japanese title by the local model. New imports appear unfiled in All texts. Agents attach a lesson to a folder afterward through a separate graph transaction. Imports expose stage, processed/total sentence counts, percentage, elapsed time, estimated remaining time, and errors. The skill documents the rule: use an existing API for an action when available; otherwise execute graph queries through the validated transaction interface.
 
 ## Development and verification
 

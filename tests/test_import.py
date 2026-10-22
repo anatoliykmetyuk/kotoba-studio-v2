@@ -70,3 +70,54 @@ def test_spelling_migration_unions_families_preserves_meanings_and_statuses():
  assert len(statuses)==1 and statuses[0]['state']=='familiar'
  assert migrate(after)[0]==after
  assert before==m.snapshot()
+
+@pytest.mark.parametrize('title', ['', '  \t', None])
+def test_import_contract_allows_missing_title(title):
+ from api.app import Import
+ payload={'body':'猫が眠る。'}
+ if title is not None:payload['title']=title
+ assert Import(**payload).title==(title or '')
+
+@pytest.mark.parametrize('supplied', ['', ' \t', 'Provided title'])
+def test_worker_generates_only_missing_title(monkeypatch,supplied):
+ monkeypatch.setenv('KOTOBA_WORKER_TOKEN','test')
+ from worker import main
+ calls=[];stages=[]
+ def generate(system,payload,schema):
+  calls.append(payload)
+  assert schema['properties']['title']['maxLength']==30
+  return {'title':'  猫の日常  '}
+ class Response:
+  def raise_for_status(self):pass
+ monkeypatch.setattr(main,'generate',generate)
+ monkeypatch.setattr(main.CLIENT,'post',lambda url,**kw:(stages.append(kw['json']['stage']) or Response()))
+ monkeypatch.setattr(main,'annotate',lambda p,report:{'sentences':[]})
+ result=main.perform({'id':'j','kind':'import','attempts':1,'payload':{'body':'猫'*7000,'title':supplied}})
+ assert result['title']==(supplied if supplied.strip() else '猫の日常')
+ assert calls==([] if supplied.strip() else [{'text':'猫'*6000}])
+ assert stages==([] if supplied.strip() else ['title'])
+
+@pytest.mark.parametrize('value',[None,42,'','   ','長'*31,'猫\n犬'])
+def test_generated_title_rejected_before_saving(value):
+ from api.domain import finalize_import
+ from cli.migrate import Memory
+ m=Memory();before=m.snapshot()
+ with pytest.raises(ValueError,match='generated lesson title'):
+  finalize_import(m,{'title':'','body':'猫'},{'title':value,'sentences':[]})
+ assert m.snapshot()==before
+
+def test_generated_title_saved_and_duplicate_keeps_original(monkeypatch):
+ from api.domain import finalize_import,prepare_import
+ from cli.migrate import Memory
+ from api.schema import SCHEMA,validate_graph
+ monkeypatch.setattr('api.domain.folders',lambda t:[])
+ m=Memory();m.create('Schema','schema:active',digest=SCHEMA['digest'],version=SCHEMA['version'])
+ payload={'body':'猫','sourceUrl':'https://example.com/title-fixture'}
+ accepted=prepare_import(m,payload)
+ assert json.loads(m.get(accepted['jobId'])['payload'])['title']==''
+ first=finalize_import(m,payload,{'title':'猫の日常','sentences':[]})
+ assert m.get(first['textId'])['title']=='猫の日常'
+ second=prepare_import(m,payload|{'title':'Another title'})
+ assert second=={'textId':first['textId'],'duplicate':True}
+ assert m.get(first['textId'])['title']=='猫の日常'
+ validate_graph(m.snapshot())

@@ -25,7 +25,7 @@ class RetokenizeApply(Strict):
 class RetokenizePlan(Strict):
     familyRepairs:list[str]=Field(default_factory=list,max_length=100)
 class Import(Strict):
-    title:str=Field(min_length=1,max_length=200)
+    title:str=Field(default='',max_length=200)
     body:str=Field(min_length=1,max_length=50000)
     # Older clients send this field. Ingestion no longer assigns folders.
     folder:str=Field(default='',deprecated=True,description='Ignored. Assign folder membership separately through a graph transaction.')
@@ -115,7 +115,7 @@ class PhraseRequest(Strict):
     meaning:str=Field(min_length=1,max_length=2000)
 class JobProgress(Strict):
     attempt:int
-    stage:Literal['dictionary','saving']
+    stage:Literal['title','dictionary','saving']
     completed:int=Field(ge=0)
     total:int=Field(ge=0)
 class JobResult(Strict):

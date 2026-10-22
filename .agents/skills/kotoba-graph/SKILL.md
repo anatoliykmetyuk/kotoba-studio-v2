@@ -9,7 +9,7 @@ Run `./kotoba` from this repository. It targets production; add `--environment a
 
 Use the predefined import API. Do not construct corpus nodes yourself, run the worker directly, or use a language model during import to translate words or select meanings.
 
-1. Write a UTF-8 JSON file with `title`, `body`, and optional `sourceUrl`. Preserve the supplied text and line breaks. Do not pass a folder name or folder ID. The deprecated `folder` field is accepted from old clients but ignored; import never assigns membership. Import checks for duplicate folder names before queuing any lesson work.
+1. Write a UTF-8 JSON file with `body` and optional `title` and `sourceUrl`. An omitted or blank title is generated as a short Japanese title by the existing local model. Preserve the supplied text and line breaks. Do not pass a folder name or folder ID. The deprecated `folder` field is accepted from old clients but ignored; import never assigns membership. Import checks for duplicate folder names before queuing any lesson work.
 2. Submit `./kotoba request POST /imports --file import.json`.
 3. A duplicate returns `textId` immediately without changing memberships. Otherwise, retain the returned `jobId` and poll `./kotoba request GET /jobs/JOB_ID` until `state` is `ready` or `failed`.
 4. Report the actual `progress.stage`, `percent`, `completed`/`total` sentence counts, `elapsedSeconds`, and `estimatedRemainingSeconds`. The estimate is approximate and can be null before enough work completes. `secondsSinceProgress`, `stalled`, and `leaseExpiresAt` expose inactivity. Do not invent a percentage or ETA. `/jobs` lists recent jobs with the same details.
@@ -19,7 +19,7 @@ Use the predefined import API. Do not construct corpus nodes yourself, run the w
 
 English/Latin runs are excluded from vocabulary before dictionary lookup and again at the import API boundary; original lesson text, offsets, and phrase-selection content are preserved. Mixed Japanese spellings remain eligible.
 
-Import performs local Ichiran tokenization and its JMdict lookup only. Ichiran uses its upstream boundaries and conjugations; do not add application grammar rules. Report cases it handles poorly. It never requests model inference, sentence translations, or pronunciation. Stages are queued, starting, dictionary, saving, validating, and ready; percentage reaches 100 only after the atomic graph write succeeds.
+Import performs local Ichiran tokenization and its JMdict lookup only. Ichiran uses its upstream boundaries and conjugations; do not add application grammar rules. Report cases it handles poorly. Only a missing lesson title requests model inference; text analysis never requests sentence translations or pronunciation. Stages are queued, starting, title (when generating), dictionary, saving, validating, and ready; percentage reaches 100 only after the atomic graph write succeeds.
 
 ## Agent graph operations
 

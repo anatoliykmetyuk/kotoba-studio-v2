@@ -97,7 +97,7 @@ def create_job(t,kind,payload,key=None):
 
 def prepare_import(t,payload):
     validate_folder_names(t)
-    payload={k:v for k,v in payload.items() if k not in ('folder','folderId')}
+    payload={'title':''}|{k:v for k,v in payload.items() if k not in ('folder','folderId')}
     body=payload['body'].replace('\r\n','\n').replace('\r','\n')
     if not body.strip():raise ValueError('Paste some Japanese text first.')
     existing=t.find('text:'+digest(body))
@@ -111,6 +111,9 @@ def prepare_import(t,payload):
 def finalize_import(t,payload,result,report=None):
     body=payload['body'];existing=t.find('text:'+digest(body))
     if existing:add_source(t,existing,payload);return {'textId':existing['id'],'duplicate':True}
+    if not payload.get('title','').strip():
+        from api.lesson_titles import generated_title
+        payload=payload|{'title':generated_title(result.get('title'))}
     text=t.create('Text','text:'+digest(body),title=payload['title'],body=body,textState='new',cursor=0,archived=False)
     add_source(t,text,payload)
     if payload.get('previousId'):t.link(text['id'],'PREVIOUS',payload['previousId'])

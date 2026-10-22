@@ -2133,8 +2133,8 @@
           "title": {
             "type": "string",
             "maxLength": 200,
-            "minLength": 1,
-            "title": "Title"
+            "title": "Title",
+            "default": ""
           },
           "body": {
             "type": "string",
@@ -2169,7 +2169,6 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "title",
           "body"
         ],
         "title": "Import"
@@ -2219,6 +2218,7 @@
           "stage": {
             "type": "string",
             "enum": [
+              "title",
               "dictionary",
               "saving"
             ],
