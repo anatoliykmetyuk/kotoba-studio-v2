@@ -14,6 +14,7 @@ from api.schema import SCHEMA,InvalidGraph,validate_graph
 from api import domain,jobs as job_info,word_meanings
 from api.media_config import ENGINE
 from api.ephemeral import PhraseJobs,Capacity
+from api.worker_queue import WorkerWakeup
 
 class Strict(BaseModel):model_config=ConfigDict(extra='forbid')
 class VocabularyCleanup(Strict):
@@ -109,6 +110,8 @@ class WordMeaningsResult(Strict):
     cached:bool
     jobId:str|None=None
     error:str=''
+class WordExamplesResult(Strict):
+    examples:list[dict[str,Any]]
 class Correction(Strict):
     reading:str|None=None
     meaning:str|None=None
@@ -152,6 +155,7 @@ class PracticeAnswer(Strict):
 async def lifespan(app):
     app.state.graph=Graph();app.state.graph.initialize();app.state.worker_seen=0
     app.state.phrase_jobs=PhraseJobs()
+    app.state.worker_wakeup=WorkerWakeup()
     app.state.media=Path(os.getenv('KOTOBA_MEDIA_DIR',str(Path(__file__).resolve().parents[1]/'data/media')))
     app.state.media.mkdir(parents=True,exist_ok=True)
     async def expire_phrase_requests():
@@ -166,6 +170,9 @@ async def lifespan(app):
         app.state.graph.close()
 app=FastAPI(title='Kotoba Studio v2',version='1.0.0',lifespan=lifespan,openapi_url='/api/v1/openapi.json',docs_url='/api/v1/docs',redoc_url=None)
 def graph():return app.state.graph
+def queued(result):
+    if result.get('jobId'):app.state.worker_wakeup.notify()
+    return result
 
 @app.exception_handler(ValueError)
 async def errors(request,exc):
@@ -194,7 +201,7 @@ def retokenize_plan(p:RetokenizePlan|None=None):
         payload={'fingerprint':key,'sentences':sentences(snapshot),'familyRepairs':repairs}
         job=domain.create_job(t,'retokenize',payload,'retokenize:ichiran:'+key+':'+digest(packed(repairs)))
         return {'jobId':job['id']}
-    return graph().write('retokenize.plan',prepare,actor='agent')
+    return queued(graph().write('retokenize.plan',prepare,actor='agent'))
 @app.post('/api/v1/maintenance/retokenize/apply')
 def retokenize_apply(p:RetokenizeApply):
     from api.retokenize import apply
@@ -210,7 +217,7 @@ def retokenize_apply(p:RetokenizeApply):
 def texts():return graph().read(domain.library)
 @app.post('/api/v1/imports',status_code=202,response_model=ImportResult,response_model_exclude_none=True)
 def import_text(p:Import,idempotency_key:str|None=Header(default=None)):
-    return graph().write('text.import',lambda t:domain.prepare_import(t,p.model_dump(exclude_none=True)),idempotency_key)
+    return queued(graph().write('text.import',lambda t:domain.prepare_import(t,p.model_dump(exclude_none=True)),idempotency_key))
 @app.get('/api/v1/texts/{id}')
 def text(id:str):return graph().read(lambda t:domain.text_detail(t,id))
 @app.patch('/api/v1/texts/{id}')
@@ -233,12 +240,14 @@ def checkpoint(id:str,p:Checkpoint,idempotency_key:str|None=Header(default=None)
     return graph().write('text.checkpoint',lambda t:checkpoint(t,id,p.start,p.end,p.completed),idempotency_key)
 @app.get('/api/v1/words/{id}')
 def word(id:str):return graph().read(lambda t:domain.word_detail(t,id))
+@app.get('/api/v1/words/{id}/examples',response_model=WordExamplesResult)
+def word_examples(id:str):return {'examples':graph().read(lambda t:domain.word_examples(t,id))}
 @app.post('/api/v1/words/{id}/meanings',response_model=WordMeaningsResult,response_model_exclude_none=True)
 def request_word_meanings(id:str,response:Response):
     result=graph().read(lambda t:word_meanings.request(t,id))
     if result is None:result=graph().write('word.meanings.request',lambda t:word_meanings.request(t,id,create=True))
     response.status_code=200 if result['state']=='ready' else 202
-    return result
+    return queued(result)
 @app.put('/api/v1/words/{id}/status')
 def word_status(id:str,p:Status):return graph().write('word.status',lambda t:domain.set_status(t,id,p.area,p.state,p.revision,p.onlyIfNew),scalar_only=True)
 @app.post('/api/v1/words/{id}/learn',response_model=LearnResult)
@@ -286,24 +295,26 @@ def retry(id:str):
         j=t.get(id)
         if j['type']!='Job' or not(j['jobState'] in ('failed','pending') or j['jobState']=='running' and j['lease']<now()):raise Conflict('Only failed, pending, or expired jobs can be retried')
         return t.update(id,jobState='pending',error='')
-    return graph().write('job.retry',apply,scalar_only=True)
+    result=graph().write('job.retry',apply,scalar_only=True)
+    app.state.worker_wakeup.notify()
+    return result
 @app.post('/api/v1/phrase-tools/translation',status_code=202,response_model=SubmittedJob)
 def phrase_translation(p:Translate,response:Response):
     if not p.text.strip():raise ValueError('Select some Japanese text')
     response.headers['Cache-Control']='no-store'
-    return app.state.phrase_jobs.submit('translation',p.model_dump())
+    return queued(app.state.phrase_jobs.submit('translation',p.model_dump()))
 @app.post('/api/v1/phrase-tools/speech',status_code=202,response_model=SubmittedJob)
 def phrase_speech(p:PhraseSpeechRequest,response:Response):
     if not p.text.strip():raise ValueError('Select some Japanese text')
     response.headers['Cache-Control']='no-store'
-    return app.state.phrase_jobs.submit('speech',{'text':p.text,'voice':'jf_alpha','speed':0.9})
+    return queued(app.state.phrase_jobs.submit('speech',{'text':p.text,'voice':'jf_alpha','speed':0.9}))
 @app.get('/api/v1/phrase-tools/speech/play',response_class=RedirectResponse)
 async def play_phrase_speech(request:Request,text:str=QueryParam(min_length=1,max_length=1500),request_id:str=QueryParam(alias='request',min_length=1,max_length=128)):
     # A fresh URL per explicit gesture allows native iOS playback activation.
     # The nonce is a browser cache buster, never a server result lookup key.
     if not text.strip():raise ValueError('Select some Japanese text')
     queue=app.state.phrase_jobs
-    id=queue.submit('speech',{'text':text,'voice':'jf_alpha','speed':0.9})['jobId']
+    id=queued(queue.submit('speech',{'text':text,'voice':'jf_alpha','speed':0.9}))['jobId']
     deadline=time.monotonic()+180
     while True:
         if await request.is_disconnected():
@@ -367,7 +378,7 @@ def speech(p:SpeechRequest):
         j=domain.create_job(t,'speech',{'speechId':s['id'],'text':pronunciation,'voice':p.voice,'speed':p.speed},'speech-job:'+key)
         if j['jobState'] in ('failed','ready'):j=t.update(j['id'],jobState='pending',error='')
         return {'speechId':s['id'],'jobId':j['id'],'cached':False}
-    return graph().write('speech.request',create)
+    return queued(graph().write('speech.request',create))
 @app.get('/api/v1/speech/play',response_class=RedirectResponse)
 async def play_speech(request:Request,text:str|None=QueryParam(default=None,max_length=1500),occurrenceId:str|None=None,voice:str='jf_alpha',speed:float=QueryParam(default=0.9,ge=0.5,le=1.5)):
     # A media URL lets the browser start play() in the original user gesture,
@@ -401,7 +412,7 @@ def translation(p:Translate):
         if j['jobState']=='ready':return json.loads(j['result'])
         if j['jobState']=='failed':j=t.update(j['id'],jobState='pending',error='')
         return {'jobId':j['id']}
-    return graph().write('translation.request',create)
+    return queued(graph().write('translation.request',create))
 @app.get('/api/v1/settings')
 def settings():
     s=graph().read(lambda t:t.find('settings:user'));return {'theme':'system','fontSize':20,'lineHeight':1.85,'readerLayout':'book','furigana':True,'checkpointWords':100}|(json.loads(s['payload']) if s else {})
@@ -479,7 +490,10 @@ def practice_answer(p:PracticeAnswer):
 @app.post('/api/v1/graph/query')
 def query(p:Query):return graph().query(p.query,p.params)
 @app.post('/api/v1/graph/transaction')
-def transaction(p:Transaction):return graph().raw_write([s.model_dump() for s in p.statements],p.dryRun,p.expectedRevisions)
+def transaction(p:Transaction):
+    result=graph().raw_write([s.model_dump() for s in p.statements],p.dryRun,p.expectedRevisions)
+    if not p.dryRun:app.state.worker_wakeup.notify()
+    return result
 @app.get('/api/v1/graph/export')
 def export():return graph().read(lambda t:t.snapshot())
 @app.get('/api/v1/graph/audit')
@@ -522,8 +536,18 @@ def migration_apply(snapshot:dict[str,Any]):
     return graph().write('migration.apply',apply,actor='migration')
 
 @app.post('/api/v1/worker/claim')
-def claim(authorization:str|None=Header(default=None)):
+async def claim(request:Request,authorization:str|None=Header(default=None),wait:float=QueryParam(default=0,ge=0,le=25)):
     require_worker(authorization)
+    wakeup=app.state.worker_wakeup;deadline=time.monotonic()+wait
+    while True:
+        revision=wakeup.revision
+        result=await run_in_threadpool(claim_next)
+        if result['job'] or wait==0:return result
+        remaining=deadline-time.monotonic()
+        if remaining<=0 or await request.is_disconnected():return result
+        await wakeup.wait(revision,min(remaining,wakeup.RESCAN_SECONDS))
+
+def claim_next():
     def candidates(t):return t.run('MATCH (j:Job) WHERE j.jobState="pending" OR (j.jobState="running" AND j.lease<$now) RETURN j.id AS id,j.createdAt AS createdAt ORDER BY j.createdAt LIMIT 1',now=now())
     pending=graph().read(candidates)
     temporary=app.state.phrase_jobs.claim(pending[0]['createdAt'] if pending else None)

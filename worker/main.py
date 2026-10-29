@@ -97,8 +97,8 @@ def main():
     print('Kotoba native worker ready',flush=True)
     while not STOP.is_set():
         try:
-            r=CLIENT.post(URL+'/worker/claim');r.raise_for_status();job=r.json()['job']
-            if not job:STOP.wait(1);continue
+            r=CLIENT.post(URL+'/worker/claim',params={'wait':25});r.raise_for_status();job=r.json()['job']
+            if not job:continue
             done=threading.Event()
             def heartbeat():
                 while not done.wait(45):

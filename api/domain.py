@@ -177,15 +177,42 @@ def word_meanings(t,id):
     return [x['m'] for x in meanings]
 
 def word_detail(t,id):
-    w=t.get(id)
-    if w['type']!='Word':raise Missing('Word not found')
-    base=t.get(w['family'])
-    forms=t.run('MATCH (w:Word)-[:BASE_FORM]->(b:Word {id:$id}) RETURN properties(w) AS w ORDER BY w.surface',id=base['id'])
-    examples=t.run('''MATCH (t:Text)-[:PLACEMENT]->(p)-[:TOKEN]->(o)-[:WORD]->(w:Word)-[:BASE_FORM]->(b:Word {id:$id})
-    MATCH (p)-[:SENTENCE]->(s) RETURN DISTINCT t.id AS textId,t.title AS title,t.textState AS textState,s.id AS sentenceId,p.id AS occurrenceId,s.body AS body,p.start AS start,p.completed AS seen ORDER BY title,start LIMIT 50''',id=base['id'])
-    meanings=word_meanings(t,id)
-    status=learning_status(t,base['id'])
-    return w|{'meaning':'; '.join(m['body'] for m in meanings),'meanings':meanings,'base':base,'status':status,'statuses':{area:status for area in AREAS},'forms':[x['w'] for x in forms],'examples':examples}
+    # Keep the initial popup read bounded by this family. Corpus occurrences
+    # are deliberately loaded only by the explicit examples request below.
+    rows=t.run('''MATCH (w:Word {id:$id})-[:BASE_FORM]->(b:Word)
+    CALL (w,b) {
+      WITH [w,b] AS owners UNWIND owners AS owner
+      MATCH (owner)-[:HAS_MEANING]->(m:Meaning)
+      WITH DISTINCT m ORDER BY '''+MEANING_ORDER+'''
+      RETURN collect(properties(m)) AS meanings
+    }
+    CALL (b) {
+      MATCH (form:Word)-[:BASE_FORM]->(b)
+      WITH form ORDER BY form.surface
+      RETURN collect(properties(form)) AS forms
+    }
+    OPTIONAL MATCH (b)-[:STATUS]->(st:LearningStatus)
+    RETURN properties(w) AS word,properties(b) AS base,meanings,forms,collect(properties(st)) AS statuses''',id=id)
+    if not rows:raise Missing('Word not found')
+    row=rows[0];w=row['word']|{'type':'Word'};base=row['base']|{'type':'Word'}
+    if len(row['statuses'])!=1:raise InvalidGraph('Family requires one learning status')
+    status=row['statuses'][0];meanings=row['meanings']
+    return w|{'meaning':'; '.join(m['body'] for m in meanings),'meanings':meanings,'base':base,'status':status,'statuses':{area:status for area in AREAS},'forms':row['forms'],'examples':[]}
+
+def word_examples(t,id):
+    rows=t.run('''MATCH (:Word {id:$id})-[:BASE_FORM]->(b:Word)
+    CALL (b) {
+      MATCH (t:Text)-[:PLACEMENT]->(p)-[:TOKEN]->()-[:WORD]->(:Word)-[:BASE_FORM]->(b)
+      MATCH (p)-[:SENTENCE]->(s)
+      WITH DISTINCT t.id AS textId,t.title AS title,t.textState AS textState,s.id AS sentenceId,
+        p.id AS occurrenceId,s.body AS body,p.start AS start,p.completed AS seen
+      ORDER BY title,start LIMIT 50
+      RETURN collect({textId:textId,title:title,textState:textState,sentenceId:sentenceId,
+        occurrenceId:occurrenceId,body:body,start:start,seen:seen}) AS examples
+    }
+    RETURN examples''',id=id)
+    if not rows:raise Missing('Word not found')
+    return rows[0]['examples']
 
 def set_status(t,id,area,state,revision=None,only_if_new=False):
     # Deprecated area arguments from installed clients address the same status.
