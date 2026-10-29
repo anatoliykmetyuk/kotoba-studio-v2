@@ -61,7 +61,11 @@ def test_checkpoint_preserves_non_new_statuses_and_is_idempotent_after_undo(clie
     # All encounters survive undo, and repeating a fresh check does not duplicate them.
     graph=app.state.graph
     def encounters():return graph.read(lambda t:t.run('MATCH (:Text {id:$id})-[:PLACEMENT]->()-[:TOKEN]->(o)<-[:OCCURRED_IN]-(e:Encounter) RETURN e.id AS id',id=text['id']))
-    before=encounters();assert len(before)==2
+    before=encounters()
+    # The shared fixture may retain evidence from an earlier completed section.
+    # This section's two occurrences each have exactly one reading encounter.
+    local=graph.read(lambda t:t.run('MATCH (p:SentenceOccurrence {id:$id})-[:TOKEN]->(o)<-[:OCCURRED_IN]-(e:Encounter {area:"reading"}) RETURN e.id AS id',id=text['sentences'][0]['id']))
+    assert len(local)==2
     assert put(client,text,0,0).status_code==200
     assert {row['id'] for row in encounters()}=={row['id'] for row in before}
 

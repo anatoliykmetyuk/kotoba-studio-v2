@@ -1,9 +1,9 @@
-/* No mutation request is intercepted or queued here. Reading progress has its
-   own acknowledged queue; offline state/status writes must not report success. */
-const SHELL='kotoba-shell-'+VERSION;const DATA='kotoba-read-cache-v1';
+/* Explicit checkpoints have their own acknowledged queue. Other offline
+   mutations must not report success. */
+const SHELL='kotoba-shell-'+VERSION;const DATA='kotoba-read-cache-v2';
 const NETWORK_TIMEOUT_MS=8000;
 self.addEventListener('install',event=>event.waitUntil(caches.open(SHELL).then(cache=>cache.addAll(PRECACHE))));
-self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const name of await caches.keys())if(name.startsWith('kotoba-shell-')&&name!==SHELL)await caches.delete(name);await self.clients.claim()})()));
+self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const name of await caches.keys())if(name.startsWith('kotoba-shell-')&&name!==SHELL||name.startsWith('kotoba-read-cache-')&&name!==DATA)await caches.delete(name);await self.clients.claim()})()));
 self.addEventListener('message',event=>{if(event.data==='activate-update')event.waitUntil(self.skipWaiting())});
 async function remember(cache,request,response,max){
  if(response.ok){await cache.put(request,response.clone());if(max){const keys=await cache.keys();for(const key of keys.slice(0,Math.max(0,keys.length-max)))await cache.delete(key)}}

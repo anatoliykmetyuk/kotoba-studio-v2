@@ -25,6 +25,10 @@ test('standalone app window keeps phone and tablet reader controls within the vi
   await page.waitForFunction(()=>navigator.serviceWorker.controller?.state==='activated');
   for(const size of [{width:390,height:844},{width:844,height:390},{width:820,height:1180},{width:1180,height:820}]){
    await page.setViewportSize(size);await page.goto(baseURL+'/#'+text.id);await expect(page.locator('.reader')).toBeVisible();
+   const checkpoint=page.getByRole('checkbox',{name:'Complete section 1',exact:true});
+   await checkpoint.tap();await expect(checkpoint).toHaveAttribute('aria-checked','true');
+   await expect(page.getByRole('progressbar',{name:'Reading progress',exact:true})).toHaveAttribute('aria-valuenow','100');
+   await checkpoint.tap();await expect(checkpoint).toHaveAttribute('aria-checked','false');
    await page.locator(`[data-token-id="${token.id}"]`).tap();const panel=page.getByRole('dialog',{name:'Word details',exact:true});
    const status=panel.getByRole('group',{name:'Learning Status'});await expect(status).toHaveCount(1);
    await expect(status.getByRole('button',{name:'Known',exact:true})).toHaveAttribute('aria-pressed','true');

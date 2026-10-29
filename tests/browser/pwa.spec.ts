@@ -18,7 +18,7 @@ test('trusted HTTPS installs the PWA and caches read requests',async({page})=>{
   const manifest=await(await fetch('/manifest.webmanifest')).json();
   const response=await fetch('/api/v1/texts');
   await response.json();
-  const cache=await caches.open('kotoba-read-cache-v1');
+  const cache=await caches.open('kotoba-read-cache-v2');
   const cached=await cache.match('/api/v1/texts');
   return {manifest,cached:!!cached,active:(await navigator.serviceWorker.getRegistration())?.active?.state};
  });

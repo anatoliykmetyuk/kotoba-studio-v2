@@ -23,7 +23,7 @@ different meanings of the same spelling. Learning Status has one control and no
 area filters. Sentence text deduplicates; per-Text placements and token
 occurrences retain original offsets.
 Identical content and identities deduplicate. Texts independently track New or
-Completed and their furthest reading position.
+Completed and explicit sentence completion, independently of viewport bookmarks.
 
 Folder names are unique and editable in place through graph queries. Lesson
 ingestion does not create folders or assign membership. Imports save
@@ -76,15 +76,29 @@ existing typography.
 ## Reading and interaction
 
 The reader should feel like an e-book, with continuous paragraphs, modest default
-type, compact paragraph spacing, and no per-sentence toolbars or “read to here”
-controls. Font size and line spacing are configurable under reader options and
-persist across devices. Reading progress saves automatically. Put sentence
-meaning and audio in the selected-word context panel. Opening, restoring or
-closing a lesson must not advance progress. A device-local viewport bookmark is independent of
-monotonic furthest-read progress. Restore server-only progress at the same
-viewport line used when saving it. Popup scroll locks, layout changes, and stale
-query responses must not create reading activity. Explicit offline progress
-queues until the server acknowledges it.
+type and compact paragraph spacing. Horizontal dividers with muted checkboxes
+split the text into sections. Count stored word occurrences, including repeats,
+until the configurable Words per section limit is reached, finish that sentence,
+then reset counting for the next section. Default to 100 words, approximately two
+phone screens; allow 10 through 500 words. Always include a final checkpoint.
+Keep font size, line spacing and section size in shared reader settings.
+Put sentence meaning and audio in the selected-word context panel.
+
+Only checking or unchecking a section changes reading progress. Sections can be
+completed in any order; a checkpoint covers only the text after the previous
+divider through itself. Progress sums completed sentence weights, using each
+sentence's word occurrence count with a minimum weight of one for tokenless
+sentences. All sentences checked means Completed and 100%; unchecking reopens the
+lesson. Animate a newly green check and the progress bar, respecting reduced
+motion. Persist completion per sentence so changing section size can regroup it
+without erasing completion. A regrouped checkbox is checked only when every
+sentence in that section is complete.
+
+Scrolling saves only a device-local viewport bookmark and never reading activity
+or completion. Restore that bookmark at its saved viewport line. Popup locks,
+layout changes and stale responses must not alter completion. Explicit offline
+checkpoint actions persist in order until acknowledged, including check then
+undo, and update the durable read cache before their queue entries are removed.
 
 A word tap opens its canonical base, meanings, and family details, automatically
 pronounces the base, and atomically promotes New to Learning without downgrading
@@ -146,11 +160,17 @@ operate a feature; let the layout and controls explain themselves.
 
 ## Completion and lesson practice
 
-Completion previews the count of unique base families with New learning status.
-The UI confirms against a graph-state fingerprint, marking those families Known
-in the same transaction as lesson completion. Families without New
-remain unchanged. Reopening is status-neutral. Already completed lessons can
-explicitly mark remaining New words Known; deployment never does so implicitly.
+Checking a section atomically marks its New canonical word families Known and
+records occurrence evidence once. Shared forms reflect their canonical family's
+status everywhere. Other learning statuses remain unchanged. Undo preserves all
+word statuses and existing encounters. The explicit full-lesson agent API still
+supports completion previews guarded by a graph-state fingerprint.
+
+The one-time reading-checkpoints schema migration initializes all sentences of
+already Completed texts as checked, with other texts unchecked. Preserve source
+content and every word status; deployment never promotes vocabulary implicitly.
+Old partial progress is disposable and has no compatibility layer. The retained
+legacy cursor property does not drive progress or seen/unseen exploration.
 
 Practice is entered within a lesson, with questions and distractors from that
 Text only, and provides a return to the lesson. Answer APIs validate membership.

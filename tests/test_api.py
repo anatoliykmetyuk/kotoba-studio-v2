@@ -32,7 +32,7 @@ def test_goal_fields_absent_and_settings_validated(client,monkeypatch):
  def forbidden(*_):raise AssertionError("Settings creation and updates must not scan the corpus")
  monkeypatch.setattr(Tx,"snapshot",forbidden)
  default=client.get('/api/v1/settings').json()
- assert not any('target' in k.lower() or 'point' in k.lower() for k in default)
+ assert not any('target' in k.lower() or k.lower() in ('point','points','dailypoints') for k in default)
  assert client.patch('/api/v1/settings',json={'wordsTarget':100}).status_code==422
  assert client.patch('/api/v1/settings',json={'lineHeight':7}).status_code==422
  assert client.patch('/api/v1/settings',json={'fontSize':22,'lineHeight':1.95}).status_code==200

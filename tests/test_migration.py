@@ -19,6 +19,8 @@ def corpus():
  graph,_=migrate(json.loads(path.read_text()))
  from cli.learning_status import migrate as unify
  graph,_=unify(graph)
+ from cli.reading_checkpoints import migrate as checkpoints
+ graph,_=checkpoints(graph)
  for n in graph['nodes']:
   if 'Schema' in n['labels']:n['properties']['digest']=SCHEMA['digest']
  return graph

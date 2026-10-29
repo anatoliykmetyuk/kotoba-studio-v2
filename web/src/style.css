@@ -27,6 +27,22 @@ dialog{padding:0;border:1px solid var(--line);border-radius:15px;background:var(
 .is-reading .reader-meta{margin-bottom:16px}
 .is-reading .reading-legend{padding:0 0 24px;border:0;gap:15px}
 .book-progress{font-size:10px;color:var(--muted);text-align:center;margin-top:22px;letter-spacing:.02em}
+.is-reading .reader-toolbar{flex-wrap:wrap;row-gap:2px;padding-bottom:8px}
+.reader-meter{display:flex;align-items:center;gap:10px;width:100%;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.reader-meter>span{min-width:30px;text-align:right}
+.reading-progress-track{position:relative;flex:1;height:5px;overflow:hidden;border-radius:8px;background:var(--soft)}
+.reading-progress-fill{display:block;height:100%;border-radius:inherit;background:#559266;transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.reading-progress-flash{position:absolute;inset:0;pointer-events:none;background:linear-gradient(100deg,transparent,#b4e7aa99,transparent);animation:progress-glow .8s ease-out both}
+.reading-checkpoint{display:flex;align-items:center;gap:16px;margin:.65em 0 .95em;font-family:Inter,-apple-system,sans-serif;line-height:1}
+.reading-checkpoint>span{height:1px;flex:1;background:var(--line);transition:background .25s}
+.reading-checkpoint>button{display:grid;place-items:center;flex-shrink:0;width:48px;height:48px;border:1px solid var(--line);border-radius:50%;color:var(--muted);background:var(--paper);transition:color .2s,background .2s,border-color .2s;touch-action:manipulation}
+.reading-checkpoint>button>span{display:grid;place-items:center}
+.reading-checkpoint.is-complete>button{color:#fff;background:#41845a;border-color:#41845a}
+.reading-checkpoint.is-complete>span{background:#72a480}
+.checkpoint-pop{animation:checkpoint-pop .42s cubic-bezier(.15,.8,.25,1.4)}
+@keyframes checkpoint-pop{0%{transform:scale(.55)}65%{transform:scale(1.2)}100%{transform:scale(1)}}
+@keyframes progress-glow{0%{opacity:0;transform:translateX(-100%)}25%{opacity:1}100%{opacity:0;transform:translateX(100%)}}
+@media(prefers-reduced-motion:reduce){.reading-progress-flash{display:none}}
 .sentence-source p{font-family:'Yu Mincho',serif;font-size:16px;line-height:1.85;margin-bottom:5px;overflow-wrap:anywhere}
 .context-actions{display:flex;gap:8px}.sentence-context .context-translation{font:13px/1.7 -apple-system,sans-serif;color:var(--muted)}
 .is-reading .reader-finish{padding-top:35px}.is-reading .finish-symbol{display:none}.is-reading .reader-finish h2{font-size:21px}

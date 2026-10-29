@@ -72,6 +72,17 @@ uv run python scripts/compile_ontology.py
 
 Backup includes graph JSON, schema JSON, and speech media. Restore replaces the current graph and requires the matching schema; restore the matching source revision before restoring an older schema. It preserves the service's active Schema ID. Schema transformations use the same parameterized statement format as graph transactions. The plan runs in a rolled-back transaction against the new validated OML profile. Apply stops the worker/API, uses the new image to migrate and validate atomically, then restarts them. A failed apply keeps the API stopped for investigation and retains the backup. Do not change an ontology digest by hand to silence a mismatch.
 
+Reading checkpoints use `schema-plan --migration reading-checkpoints` and
+`schema-apply --migration reading-checkpoints --backup data/backups/UNIQUE_DIRECTORY`.
+The one-time migration checks every sentence of an already Completed Text and
+starts other Texts unchecked, preserving source content, word statuses and
+encounters. Repeat plans initialize zero sentences. Partial legacy cursors are
+retained as inert properties and never drive reading progress or seen filters.
+`PUT /texts/ID/checkpoint` accepts `{start,end,completed}` with sentence-aligned
+source offsets. Checking marks only that range's New families Known; undo never
+reverts vocabulary. Use a stable `Idempotency-Key` for retries. Text detail and
+Library expose `readingProgress` between zero and one.
+
 The compiler deliberately supports a documented OML subset and rejects unsupported constructs. See [ontology profile](../ontology/README.md) before extending it.
 
 ## Inspectable import action
