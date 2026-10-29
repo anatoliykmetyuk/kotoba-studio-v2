@@ -384,3 +384,78 @@ already absent before this work; neither result changed during this task.
 Detailed logs, traces, screenshots, preservation receipts and privacy audits
 remain under ignored `.runtime/checkpoint-*`; migration backups remain under
 ignored `data/backups/`. Installed clients retain explicit Reload to update.
+
+## Word responsiveness, 2026-10-29
+
+Word status clicks now update the whole cached canonical family immediately,
+including inflected forms, with ordered saves and rollback on failure. Server
+revisions reconcile delayed reads and other-device changes. Status saves no
+longer reload the lesson, library or word details. Meanings/status/forms load in
+one core query; examples and their count are absent until Show examples is
+selected. Requested examples have a separate cached query.
+
+Idle workers use bounded queue notifications with periodic read-only recovery.
+Scalar writes reuse transaction-local reads and return fresh properties directly.
+Full snapshots use two aggregate records and Neo4j's official Rust extension;
+all existing OML conformance checks remain. The shared schema writer lock stays
+because generic structural validation depends on it. Encounter creation and
+contiguous queued checkpoints are batched while retaining ordered check/undo,
+once-only reading credit, individual retry receipts and single-route replay
+compatibility. Fully acknowledged batches replay without another write.
+Checkpoint and word receipts share the service worker's durable write queue.
+
+| Verification | Result |
+| --- | --- |
+| Backend and live language boundary | 217 passed in 24.88 seconds with live models enabled, including actual dictionary lookup, saved model fallback, schema rollback, concurrent revisions, batch retries and agent operations. |
+| JavaScript and build | All 81 checks passed; frontend type/build checks passed. Coverage includes delayed reads, rapid clicks, failures, family-wide status projection, ordered durable batches and service-worker write races. |
+| Final core device matrix | 34 passed in 3.7 minutes across phone Chromium, phone WebKit and iPad WebKit, portrait and landscape. Eight WebKit offline-emulation cases retain their documented skip. |
+| Final PWA matrix | 21 passed in 2.0 minutes: trusted HTTPS caching and real Tailscale upstream-outage recovery in all six mobile configurations, update lifecycle in those six plus desktop Chromium/WebKit, and an actual Chromium standalone window at four phone/tablet sizes. Five duplicate standalone configurations skipped intentionally. |
+| Real HTTP fallback | Two disposable upstream-boundary checks passed in 34.9 seconds, on Chromium and WebKit. No application-route mocks were used for final acceptance. |
+| Overlays, speech and spelling | All 16 overlay cases and six spelling-card cases passed in the earlier matrix, including real muted media progression, mouse/touch/pen/keyboard behavior and stable reader geometry. |
+
+Initial runs exposed first-load cache setup assumptions and a reload assertion that
+mistook the new optimistic pressed state for server acknowledgment. Tests now
+prime the actual service worker and wait for Saving status to finish before
+checking persisted reloads. Broader tests exposed repeated encounter writes and
+full validation for each queued checkpoint. Those bottlenecks were fixed rather
+than increasing test timeouts; the previously failing phone checkpoint scenario
+passed in 10.6 seconds, and all six final configurations passed.
+Fresh-context reviews found and resolved stale durable checkpoint overwrites,
+status/checkpoint projection ordering, disconnected-worker claims and unnecessary
+batch-replay validation. Independent follow-ups found no remaining actionable
+recommendations. Mobile/iPad and standalone screenshots were inspected, including
+nonzero safe-area insets. These are browser emulations, not physical-device tests.
+Actual WebKit upstream-outage recovery passed separately from skipped offline
+emulation.
+
+The same synthetic lesson over trusted Tailscale HTTPS gave these local results:
+
+| Measure | Before | After |
+| --- | ---: | ---: |
+| Word detail HTTP median, 12 requests | 11.26 ms | 2.52 ms |
+| Word detail payload | 19,194 bytes | 4,184 bytes |
+| Status save HTTP median, 12 requests | 5.23 ms | 3.44 ms |
+| Status feedback median, eight Chromium clicks | 79.5 ms | 13.2 ms |
+| Application requests for those eight status changes | 32 | 8 |
+
+Browser feedback is measured from a programmatic click to the first observed
+pressed state in the same 390-by-844 Chromium viewport. It isolates the update
+path and does not establish physical phone tap-to-paint latency or a load limit.
+Read-only profiling on 28,841 nodes identified snapshot decoding as the dominant
+structural-write cost; the accelerated aggregate snapshot probe took 1.31 seconds
+plus 1.39 seconds of unchanged validation.
+
+Production was backed up and deployed on trusted Tailscale HTTPS port 3010 with
+loopback-only upstream HTTP. Served HTML, JavaScript and service worker match the
+verified build; core word and explicit example reads and graph audit passed.
+Pre/post-deployment comparisons preserve existing identities, source content,
+reading progress and existing media. Two ordinary New-to-Learning actions and a
+speech request/claim occurred concurrently and were retained; the graph was not
+incorrectly reported as byte-identical. The schema digest is unchanged.
+The protected-file baseline still has 29 matching present files and 933 historical
+paths already absent, with no changed existing protected files.
+
+Logs, traces, screenshots, profiles, publication audits and preservation receipts
+remain in ignored `.runtime/word-performance/` and browser result directories.
+The production backup is in ignored `data/backups/before-word-performance-20261029/`.
+Installed clients retain explicit Check for updates and Reload to update controls.
