@@ -11,28 +11,50 @@ class Conflict(ValueError): pass
 class Missing(ValueError): pass
 
 class Tx:
-    def __init__(self,tx,scalar_only=False): self.tx=tx;self.scalar_only=scalar_only
+    def __init__(self,tx,scalar_only=False): self.tx=tx;self.scalar_only=scalar_only;self._entities={}
     def _execute(self,query,/,**params):return [r.data() for r in self.tx.run(query,params)]
     def run(self,query,/,**params):
         if self.scalar_only and re.search(r'\b(CREATE|MERGE|SET|DELETE|REMOVE|FOREACH|CALL|LOAD)\b',query,re.I):raise InvalidGraph('Scalar transaction cannot execute graph mutations')
+        # Public queries can change arbitrary records in structural transactions.
+        # Invalidate conservatively even for reads; helper queries keep known rows.
+        self._entities.clear()
         return self._execute(query,**params)
+    def _entity(self,row):
+        entity=row['n'] | {'type':next(l for l in row['labels'] if l!='Entity')}
+        if self.scalar_only:self._entities[entity['id']]=entity
+        return dict(entity)
     def get(self,id):
-        rows=self.run('MATCH (n:Entity {id:$id}) RETURN properties(n) AS n, labels(n) AS labels',id=id)
+        # Scalar writes hold the schema lock and mutate only through these helpers.
+        # Return copies so callback-local edits cannot alter the cached revision.
+        if self.scalar_only and id in self._entities:return dict(self._entities[id])
+        rows=self._execute('MATCH (n:Entity {id:$id}) RETURN properties(n) AS n, labels(n) AS labels',id=id)
         if not rows: raise Missing('Entity not found')
-        return rows[0]['n'] | {'type':next(l for l in rows[0]['labels'] if l!='Entity')}
+        return self._entity(rows[0])
     def find(self,key):
-        r=self.run('MATCH (n:Entity {identityKey:$key}) RETURN properties(n) AS n',key=key)
-        return r[0]['n'] if r else None
+        rows=self._execute('MATCH (n:Entity {identityKey:$key}) RETURN properties(n) AS n, labels(n) AS labels',key=key)
+        if not rows:return None
+        if self.scalar_only:self._entity(rows[0])
+        return dict(rows[0]['n'])
     def meaning_sources(self,id):
         return self.run('MATCH (w:Word {id:$id})-[:HAS_MEANING]->(m:Meaning) RETURN m.sourceType AS sourceType,m.sourceKey AS sourceKey',id=id)
-    def create(self,concept,key,**props):
+    def _check_create(self,concept):
         if concept not in SCHEMA['classes'] or concept=='Entity': raise InvalidGraph('Unknown concept')
         if self.scalar_only and concept not in ('Audit','Mutation','Activity','Settings'):raise InvalidGraph('Scalar transaction cannot create domain entities')
+    def create(self,concept,key,**props):
+        self._check_create(concept)
         existing=self.find(key)
         if existing:return existing
+        return self._create(concept,key,**props)
+    def _create(self,concept,key,**props):
+        # Only skip the lookup when the caller already checked under the writer
+        # lock, or generated a fresh operational UUID. Constraints still enforce
+        # uniqueness and all properties use the generated OML contract.
+        self._check_create(concept)
         p={'id':props.pop('id',uid()),'identityKey':key,'revision':0,'createdAt':now(),'updatedAt':now(),**props}
         validate_properties(concept,p)
-        self._execute(f'CREATE (n:Entity:{concept}) SET n=$p',p=p);return p
+        self._execute(f'CREATE (n:Entity:{concept}) SET n=$p',p=p)
+        if self.scalar_only:self._entities[p['id']]=p | {'type':concept}
+        return p
     def update(self,id,expected=None,**props):
         old=self.get(id)
         if expected is not None and old['revision']!=expected: raise Conflict('This record changed. Reload and retry.')
@@ -41,8 +63,9 @@ class Tx:
             allowed={'LearningStatus':{'state'},'Text':{'title','archived','cursor','textState'},'Job':{'jobState','lease','attempts','error','result'},'Settings':{'payload'}}
             if not set(props)<=allowed.get(old['type'],set()):raise InvalidGraph('This update requires structural validation')
         validate_properties(old['type'],{k:v for k,v in (old|props).items() if k!='type'})
-        self._execute('MATCH (n:Entity {id:$id}) SET n += $p, n.revision=n.revision+1, n.updatedAt=$now',id=id,p=props,now=now())
-        return self.get(id)
+        rows=self._execute('MATCH (n:Entity {id:$id}) SET n += $p, n.revision=n.revision+1, n.updatedAt=$now RETURN properties(n) AS n, labels(n) AS labels',id=id,p=props,now=now())
+        if not rows:raise Missing('Entity not found')
+        return self._entity(rows[0])
     def link(self,a,rel,b):
         if self.scalar_only:raise InvalidGraph('Scalar transaction cannot change relationships')
         if rel not in SCHEMA['relations']: raise InvalidGraph('Unknown relationship')
@@ -81,16 +104,17 @@ class Graph:
         with self.driver.session() as s:
             tx=s.begin_transaction();t=Tx(tx)
             try:
-                # One database lock serializes all writers, including agent transactions.
-                t.run('MATCH (s:Schema {identityKey:"schema:active"}) SET s.revision=s.revision+1 RETURN s.id')
-                schema=t.find('schema:active')
+                # Keep scalar writes serialized with complete-graph validation:
+                # target locks alone cannot protect a structural writer's snapshot.
+                locked=t.run('MATCH (s:Schema {identityKey:"schema:active"}) SET s.revision=s.revision+1 RETURN properties(s) AS schema')
+                schema=locked[0]['schema'] if locked else None
                 if not schema or schema['digest']!=SCHEMA['digest']:raise InvalidGraph('Schema mismatch')
                 old=t.find('mutation:'+request_id) if request_id else None
                 if old:tx.rollback();return json.loads(old['result'])
                 t.scalar_only=scalar_only
                 result=fn(t)
-                if request_id:t.create('Mutation','mutation:'+request_id,result=packed(result))
-                t.create('Audit','audit:'+uid(),actor=actor,action=action,details=packed({'requestId':request_id}))
+                if request_id:t._create('Mutation','mutation:'+request_id,result=packed(result))
+                t._create('Audit','audit:'+uid(),actor=actor,action=action,details=packed({'requestId':request_id}))
                 if not scalar_only:validate_graph(t.snapshot())
                 if dry_run:tx.rollback()
                 else:tx.commit()
