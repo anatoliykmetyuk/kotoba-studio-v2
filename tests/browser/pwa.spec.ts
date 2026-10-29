@@ -81,7 +81,7 @@ test('real HTTP failures use bounded cached reads without hiding client errors o
   server.closeAllConnections();
   mode='unavailable';
   expect(await page.evaluate(async()=>(await fetch('/api/v1/settings')).status)).toBe(502);
-  expect(await page.evaluate(async()=>(await fetch('/api/v1/texts/fixture/progress',{method:'PUT',body:'{}'})).status)).toBe(502);
+  expect(await page.evaluate(async()=>(await fetch('/api/v1/texts/fixture/checkpoint',{method:'PUT',body:'{}'})).status)).toBe(502);
   for(const clientError of ['missing','unauthorized'] as const){
    mode=clientError;
    expect(await page.evaluate(async()=>{const response=await fetch('/api/v1/texts');return {status:response.status,data:await response.json()}})).toEqual({status:clientError==='missing'?404:401,data:{state:clientError}});
@@ -92,7 +92,7 @@ test('real HTTP failures use bounded cached reads without hiding client errors o
  }finally{server.closeAllConnections();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()))}
 });
 
-test('actual Tailscale upstream outage preserves cached reading and queued progress',async({page,request,baseURL},info)=>{
+test('actual Tailscale upstream outage preserves cached reading and queued checkpoints',async({page,request,baseURL},info)=>{
  test.skip(process.env.KOTOBA_PWA_OUTAGE!=='1','Opt in only when the isolated acceptance web service is available for an outage.');
  test.setTimeout(180_000);
  expect(baseURL,'Outage testing must target the isolated trusted HTTPS origin').toBe(acceptanceOrigin);
@@ -108,21 +108,27 @@ test('actual Tailscale upstream outage preserves cached reading and queued progr
  await page.waitForFunction(()=>navigator.serviceWorker.controller?.state==='activated');
  await page.reload();await expect(page.locator('.book-body')).toBeVisible();
  const before=await page.evaluate(async id=>(await fetch('/api/v1/texts/'+id)).json(),textId);
- const key='kotoba:cursor:'+textId;let queued=0;
+ let queued=0;let selected:{start:number;end:number}|undefined;
  try{
   await execute('docker',['stop','--time','2',container]);
   expect((await request.get('/api/v1/texts')).status(),'The real HTTPS gateway must report the stopped upstream').toBe(502);
   const navigation=await page.reload();expect(navigation?.fromServiceWorker()).toBe(true);
   await expect(page.locator('.book-body')).toBeVisible();
   expect(await page.evaluate(async id=>(await fetch('/api/v1/texts/'+id)).json(),textId)).toEqual(before);
-  expect(await page.evaluate(async id=>(await fetch('/api/v1/texts/'+id+'/progress',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({cursor:1})})).status,textId)).toBe(502);
-  await page.waitForTimeout(450);await page.evaluate(()=>scrollTo(0,1400));
-  await expect.poll(()=>page.evaluate(key=>Number(localStorage.getItem(key)),key)).toBeGreaterThan(before.cursor);
-  queued=await page.evaluate(key=>Number(localStorage.getItem(key)),key);
-  await expect(page.locator('.book-progress')).toContainText('Waiting to sync');
+  expect(await page.evaluate(async id=>(await fetch('/api/v1/texts/'+id+'/checkpoint',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({start:0,end:1,completed:true})})).status,textId)).toBe(502);
+  const checkpoint=page.getByRole('checkbox',{name:'Complete section 2',exact:true});
+  selected={start:Number(await checkpoint.getAttribute('data-checkpoint-start')),end:Number(await checkpoint.getAttribute('data-checkpoint-end'))};
+  const total=before.sentences.reduce((sum:number,s:{tokens:unknown[]})=>sum+s.tokens.length,0);
+  queued=before.sentences.filter((s:{start:number;end:number})=>s.start>=selected!.start&&s.end<=selected!.end).reduce((sum:number,s:{tokens:unknown[]})=>sum+s.tokens.length,0)/total;
+  expect(queued).toBeGreaterThan(0);
+  await checkpoint.tap();await expect(checkpoint).toHaveAttribute('aria-checked','true');
+  await expect(page.getByRole('checkbox',{name:'Complete section 1',exact:true})).toHaveAttribute('aria-checked','false');
+  await expect(page.getByRole('progressbar',{name:'Reading progress',exact:true})).toHaveAttribute('aria-valuenow',String(Math.round(100*queued)));
+  await page.evaluate(()=>scrollTo(0,1400));
   await page.reload();await expect(page.locator('.book-body')).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(500);
-  expect(await page.evaluate(key=>Number(localStorage.getItem(key)),key)).toBeGreaterThanOrEqual(queued);
+  await expect(page.getByRole('checkbox',{name:'Complete section 2',exact:true})).toHaveAttribute('aria-checked','true');
+  await expect(page.getByRole('progressbar',{name:'Reading progress',exact:true})).toHaveAttribute('aria-valuenow',String(Math.round(100*queued)));
   await page.screenshot({path:info.outputPath('cached-reading-during-upstream-outage.png')});
   const layout=await page.evaluate(()=>({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,overflow:Array.from(document.querySelectorAll('*')).map(el=>({tag:el.tagName,class:el.className,box:el.getBoundingClientRect().toJSON()})).filter(el=>el.box.right>innerWidth+1||el.box.left< -1)}));
   if(layout.scrollWidth>layout.width+1)await info.attach('offline-layout',{body:JSON.stringify(layout),contentType:'application/json'});
@@ -132,13 +138,16 @@ test('actual Tailscale upstream outage preserves cached reading and queued progr
   await expect.poll(async()=>{try{return(await request.get('/api/v1/texts')).status()}catch{return 0}},{timeout:30_000}).toBe(200);
  }
  expect(queued).toBeGreaterThan(0);
- await expect.poll(async()=>(await(await request.get('/api/v1/texts/'+textId)).json()).cursor,{timeout:20_000}).toBeGreaterThanOrEqual(queued);
- await expect.poll(()=>page.evaluate(key=>localStorage.getItem(key),key)).toBeNull();
+ await expect.poll(async()=>(await(await request.get('/api/v1/texts/'+textId)).json()).readingProgress,{timeout:20_000}).toBeCloseTo(queued,8);
+ const recovered=await(await request.get('/api/v1/texts/'+textId)).json();
+ expect(recovered.sentences.filter((s:{completed:boolean})=>s.completed).every((s:{start:number;end:number})=>s.start>=selected!.start&&s.end<=selected!.end)).toBe(true);
+ expect(recovered.sentences.filter((s:{start:number;end:number})=>s.start>=selected!.start&&s.end<=selected!.end).every((s:{completed:boolean})=>s.completed)).toBe(true);
  await page.reload();await expect(page.locator('.book-body')).toBeVisible();
- expect(await page.evaluate(async id=>(await(await fetch('/api/v1/texts/'+id)).json()).cursor,textId)).toBeGreaterThanOrEqual(queued);
+ await expect(page.getByRole('checkbox',{name:'Complete section 2',exact:true})).toHaveAttribute('aria-checked','true');
+ await expect(page.getByRole('checkbox',{name:'Complete section 1',exact:true})).toHaveAttribute('aria-checked','false');
+ expect(await page.evaluate(async id=>(await(await fetch('/api/v1/texts/'+id)).json()).readingProgress,textId)).toBeCloseTo(queued,8);
  }finally{
   await page.close();
-  // The pagehide progress flush can advance the revision during cleanup.
   await expect.poll(async()=>{
    const fixture=await(await request.get('/api/v1/texts/'+textId)).json();
    const response=await request.patch('/api/v1/texts/'+textId,{data:{archived:true,revision:fixture.revision}});
