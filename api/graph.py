@@ -75,7 +75,13 @@ class Tx:
         if rel not in SCHEMA['relations']: raise InvalidGraph('Unknown relationship')
         self.run(f'MATCH (a:Entity {{id:$a}})-[r:{rel}]->(b) WHERE $b IS NULL OR b.id=$b DELETE r',a=a,b=b)
     def snapshot(self):
-        return {'nodes':self.run('MATCH (n) RETURN elementId(n) AS internalId, labels(n) AS labels, properties(n) AS properties'), 'edges':self.run('MATCH (a)-[r]->(b) RETURN a.id AS `from`,type(r) AS type,b.id AS `to`,properties(r) AS properties')}
+        self._entities.clear()
+        # These projections contain only maps, lists and property values, so use
+        # the hydrated values directly without Record.data's recursive copying.
+        # Aggregate every record, including operational and invalid graph data.
+        nodes=self.tx.run('MATCH (n) RETURN collect({internalId:elementId(n),labels:labels(n),properties:properties(n)}) AS nodes').single(strict=True)['nodes']
+        edges=self.tx.run('MATCH (a)-[r]->(b) RETURN collect({`from`:a.id,type:type(r),`to`:b.id,properties:properties(r)}) AS edges').single(strict=True)['edges']
+        return {'nodes':nodes,'edges':edges}
 
 class Graph:
     def __init__(self):

@@ -27,6 +27,16 @@ class Record:
     def data(self):
         return self.value
 
+    def __getitem__(self, key):
+        return self.value[key]
+
+
+class Result(list):
+    def single(self, strict=False):
+        if strict:
+            assert len(self) == 1
+        return self[0] if self else None
+
 
 class ScriptedTransaction:
     def __init__(self, responses):
@@ -34,11 +44,11 @@ class ScriptedTransaction:
         self.queries = []
         self.committed = self.rolled_back = False
 
-    def run(self, query, params):
+    def run(self, query, params=None):
         self.queries.append((query, params))
         fragment, rows = self.responses.pop(0)
         assert fragment in query
-        return [Record(value) for value in rows]
+        return Result(Record(value) for value in rows)
 
     def commit(self):
         assert not self.responses
@@ -202,8 +212,8 @@ def test_generic_writes_still_validate_complete_graph_and_rollback():
         locked_schema(),
         ('CREATE (n:Unknown)', []),
         ('CREATE (n:Entity:Audit)', []),
-        ('elementId(n)', [{'internalId': 'bad', 'labels': ['Unknown'], 'properties': {}}]),
-        ('MATCH (a)-[r]->(b)', []),
+        ('elementId(n)', [{'nodes': [{'internalId': 'bad', 'labels': ['Unknown'], 'properties': {}}]}]),
+        ('MATCH (a)-[r]->(b)', [{'edges': []}]),
     ])
     with pytest.raises(InvalidGraph):
         graph_using(transaction).write('fixture.structural', lambda t: t.run('CREATE (n:Unknown)'))
