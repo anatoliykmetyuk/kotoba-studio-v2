@@ -335,3 +335,52 @@ Production API/worker health, served container assets, graph validity, stored
 migration progress and persistent bind mounts were verified. The old application
 remains unchanged. Test environments and their temporary HTTPS endpoint can be
 stopped independently of production and the shared dictionary.
+
+## Reading checkpoints, 2026-10-29
+
+The reader now uses independent, sentence-aligned section checkboxes. Only an
+explicit check or undo changes completion; scrolling saves a local bookmark.
+The default section size is 100 word occurrences, configurable from 10 to 500.
+Checking promotes only New families in that section to Known. Undo preserves
+vocabulary and encounter evidence. Shared sentence flags preserve completion
+when section size changes. Checkmarks and the progress bar animate, with reduced
+motion respected.
+
+| Check | Result |
+| --- | --- |
+| Backend | 161 distinct tests passed across the full run and focused migration-fixture rerun; one opt-in live-model test skipped. Full run took 20.19 seconds, focused rerun 9.00 seconds. |
+| JavaScript | All 66 pure checks passed, including section boundaries, out-of-order completion, shared families, undo, regrouping and durable queue ordering. Frontend type/build checks passed. |
+| Core device matrix | 22 passed in 4.7 minutes across phone Chromium, phone WebKit and iPad WebKit, each portrait and landscape. Eight WebKit offline-emulation cases remain skipped for the documented service-worker limitation. |
+| PWA and recovery | 29 passed in 3.1 minutes. Actual Tailscale upstream-outage recovery, trusted HTTPS caching and settings gestures passed in all six mobile configurations; update lifecycle passed on those six and desktop Chromium/WebKit. Four additional WebKit offline-emulation cases and five duplicate standalone configurations were skipped. |
+| Closed-lesson persistence | Chromium portrait/landscape verified that an acknowledged checkpoint synced from Library remains available after offline Library reload and reopening the cached lesson. Check then undo retains its word promotion after recovery. |
+| Standalone | A real Chromium app window checked and unchecked sections at phone and tablet sizes in portrait and landscape. |
+| Speech and activation | Five checks passed in 33.9 seconds across phone Chromium and WebKit, including real muted media playback and pen activation. One duplicate shared-status assertion was skipped. |
+| Schema and production | Official OML compilation, backed-up schema migration, graph audit, and preservation comparisons passed. Both repeat migration plans initialize zero sentences. Six read-only production device checks passed over trusted HTTPS port 3010. |
+
+The first backend runs exposed assertions that treated the checkpoint setting as
+a goal-system field, assumed an encounter fixture was unused, and loaded a saved
+migration fixture without the new schema step. The corrected assertions retain
+their original domain checks. An acceptance repeat plan deliberately rejected a
+concurrent fixture change; it passed after the browser writers finished.
+
+Fresh-context review found two concrete client issues: reduced-motion flash
+cleanup and an acknowledged closed lesson missing its durable cache update.
+Both were fixed, the latter received an actual offline recovery regression, and
+independent follow-up found no remaining notable recommendations. Device
+screenshots, nonzero safe-area behavior, and standalone screenshots were inspected.
+WebKit gesture and safe-area emulation does not establish physical Apple Pencil
+or device behavior. Real upstream outages passed separately from the skipped
+WebKit offline emulation.
+
+Production comparison against the migration backup preserves every existing Text
+property, completed status, LearningStatus, Word, Meaning, Sentence,
+WordOccurrence and Encounter. Completed texts initialize all sentence flags as
+checked; vocabulary is never promoted by deployment. Served HTML, service worker,
+JavaScript and CSS match both the running container and local verified build.
+All project containers still use project-local bind storage. The existing
+protected-file baseline has 29 present matching files and 933 historical paths
+already absent before this work; neither result changed during this task.
+
+Detailed logs, traces, screenshots, preservation receipts and privacy audits
+remain under ignored `.runtime/checkpoint-*`; migration backups remain under
+ignored `data/backups/`. Installed clients retain explicit Reload to update.
