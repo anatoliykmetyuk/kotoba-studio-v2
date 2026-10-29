@@ -35,7 +35,12 @@ test('import, token status, pronunciation, phrase, completion, settings and navi
  await page.locator('audio').evaluate(audio=>{audio.dataset.replayed='false';audio.addEventListener('ended',()=>{audio.dataset.replayed='true'},{once:true})});await page.getByRole('button',{name:'Pronounce word'}).click();await expect(page.locator('audio')).toHaveAttribute('data-replayed','true',{timeout:90_000});await expect(page.getByRole('alert')).toHaveCount(0);
  await page.getByRole('button',{name:'Close word details',exact:true}).click();
  await selectFirstPhrase(page,browserName);const phrase=page.getByRole('dialog',{name:'Selected phrase'});await expect(phrase).toBeVisible();await expect(phrase.locator('.phrase-translation')).toHaveAttribute('aria-busy','false',{timeout:150_000});await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.ended),{timeout:90_000}).toBe(true);await phrase.getByRole('button',{name:'Close',exact:true}).click();
- const complete=page.getByRole('button',{name:'Complete text',exact:true});if(await complete.count()){await complete.click();await page.getByRole('dialog',{name:'Complete lesson',exact:true}).getByRole('button',{name:'Complete lesson',exact:true}).click();}await expect(page.getByRole('button',{name:'Mark as New',exact:true})).toBeVisible();await page.getByRole('button',{name:'Mark as New',exact:true}).click();await expect(page.getByRole('button',{name:'Complete text',exact:true})).toBeVisible();
+ const checkpoints=page.locator('.book-body').getByRole('checkbox');const checkpointCount=await checkpoints.count();expect(checkpointCount).toBeGreaterThan(0);
+ for(let index=0;index<checkpointCount;index++){const checkpoint=checkpoints.nth(index);if(await checkpoint.getAttribute('aria-checked')==='false')await checkpoint.tap();await expect(checkpoint).toHaveAttribute('aria-checked','true')}
+ await expect(page.locator('.reader-toolbar .pill')).toHaveText('Completed');await expect(page.getByRole('progressbar',{name:'Reading progress',exact:true})).toHaveAttribute('aria-valuenow','100');
+ await expect.poll(async()=>(await(await request.get('/api/v1/texts/'+importedTextId)).json()).textState).toBe('completed');
+ await checkpoints.last().tap();await expect(checkpoints.last()).toHaveAttribute('aria-checked','false');await expect(page.locator('.reader-toolbar .pill')).toHaveText('New');await expect(page.getByRole('progressbar',{name:'Reading progress',exact:true})).not.toHaveAttribute('aria-valuenow','100');
+ await expect.poll(async()=>(await(await request.get('/api/v1/texts/'+importedTextId)).json()).textState).toBe('new');
  await page.screenshot({path:`test-results/${info.project.name}-reader.png`});await noOverflow(page);
  await page.getByRole('button',{name:'Reading options'}).click();await expect(page.getByRole('dialog')).toBeVisible();const size=page.getByRole('slider',{name:/Reading size/});const spacing=page.getByRole('slider',{name:/Line spacing/});const oldSize=Number(await size.inputValue());const oldSpacing=Number(await spacing.inputValue());await size.focus();await size.press('ArrowRight');await spacing.focus();await spacing.press('ArrowRight');await expect(page.locator('.book-body')).toHaveCSS('font-size',(oldSize+1)+'px');await expect.poll(async()=>page.locator('.book-body').evaluate(el=>Number((el as HTMLElement).style.lineHeight))).toBeCloseTo(oldSpacing+.05,2);await page.getByLabel('Appearance').selectOption('dark');await expect(page.locator('html')).toHaveAttribute('data-theme','dark');await page.getByLabel('Appearance').selectOption('light');await page.getByRole('button',{name:'Close',exact:true}).click();await expect.poll(async()=>{const stored=await (await request.get('/api/v1/settings')).json();return stored.lineHeight}).toBeGreaterThan(1.85);
  await page.locator('.reader .back-button').click();await (await visibleButton(page,'Explore')).click();await page.getByRole('textbox',{name:'Search corpus'}).fill('猫');await expect(page.locator('.explore-card').first()).toBeVisible();await page.getByLabel('At least 80% known').check();await noOverflow(page);
@@ -53,13 +58,26 @@ test('long corpus text, emoji offsets and compact import dialog remain usable',a
  await page.getByRole('button',{name:'Close',exact:true}).click();await page.setViewportSize(viewport);
 });
 
-test('automatic position survives immediate exit and a real offline interval',async({page,request,context},info)=>{
+test('scrolling saves the visual position without completing sections across exit and offline reload',async({page,request,context},info)=>{
  test.skip(info.project.name!=='phone-chromium-portrait','Shared persistence scenario runs once against the isolated stack.');
- const texts=await (await request.get('/api/v1/texts')).json();const text=texts.find((x:{title:string})=>x.title==='A quiet study session');
- async function reset(){const r=await request.post('/api/v1/graph/transaction',{data:{statements:[{query:'MATCH (t:Text {id:$id}) SET t.cursor=0 RETURN t.id',params:{id:text.id}}]}});expect(r.ok()).toBeTruthy()}
- async function cursor(){return (await (await request.get('/api/v1/texts/'+text.id)).json()).cursor}
- await reset();await page.goto('/#'+text.id);await expect(page.locator('.book-body')).toBeVisible();await page.waitForTimeout(450);await page.evaluate(()=>scrollTo(0,1000));await page.locator('.reader .back-button').click();await expect.poll(cursor).toBeGreaterThan(0);
- await reset();await page.goto('/#'+text.id);await expect(page.locator('.book-body')).toBeVisible();await page.waitForTimeout(450);await context.setOffline(true);await page.evaluate(()=>scrollTo(0,1400));await page.waitForTimeout(1200);
- const queued=await page.evaluate(id=>Number(localStorage.getItem('kotoba:cursor:'+id)),text.id);expect(queued).toBeGreaterThan(0);expect(await cursor()).toBe(0);
- await context.setOffline(false);await expect.poll(cursor).toBeGreaterThanOrEqual(queued);await expect.poll(()=>page.evaluate(id=>localStorage.getItem('kotoba:cursor:'+id),text.id)).toBeNull();
+ const response=await request.post('/api/v1/imports',{data:{title:'Mobile bookmark '+Date.now(),body:'猫は窓のそばで眠っています。私は温かいお茶を飲みました。\n\n'.repeat(35)+'記録 '+Date.now()+'。'}});expect(response.ok()).toBe(true);
+ const submitted=await response.json();let id=submitted.textId;
+ if(!id)await expect.poll(async()=>{const job=await(await request.get('/api/v1/jobs/'+submitted.jobId)).json();expect(job.state,job.error).not.toBe('failed');id=job.result.textId;return job.state},{timeout:90_000}).toBe('ready');
+ async function progress(){return(await(await request.get('/api/v1/texts/'+id)).json()).readingProgress}
+ try{
+  await page.goto('/#'+id);await expect(page.locator('.book-body')).toBeVisible();await page.waitForTimeout(450);await page.evaluate(()=>scrollTo(0,1000));
+  await expect.poll(()=>page.evaluate(id=>JSON.parse(localStorage.getItem('kotoba:position:'+id)??'null')?.wordEnd,id)).toBeGreaterThan(0);
+  await page.locator('.reader .back-button').click();expect(await progress()).toBe(0);
+  await page.goto('/#'+id);await expect(page.locator('.book-body')).toBeVisible();await page.waitForFunction(()=>navigator.serviceWorker.controller?.state==='activated');await page.waitForTimeout(450);
+  await context.setOffline(true);await page.evaluate(()=>scrollTo(0,1400));
+  await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(1000);
+  const saved=await page.evaluate(id=>JSON.parse(localStorage.getItem('kotoba:position:'+id)??'null'),id);expect(saved.wordEnd).toBeGreaterThan(0);
+  await page.reload();await expect(page.locator('.book-body')).toBeVisible();await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(1000);
+  await expect(page.getByRole('progressbar',{name:'Reading progress',exact:true})).toHaveAttribute('aria-valuenow','0');
+  expect(await page.evaluate(id=>localStorage.getItem('kotoba:cursor:'+id),id)).toBeNull();expect(await progress()).toBe(0);
+  await context.setOffline(false);await expect(page.locator('.connection-banner')).toHaveCount(0);expect(await progress()).toBe(0);
+ }finally{
+  await context.setOffline(false);await page.close();
+  const text=await(await request.get('/api/v1/texts/'+id)).json();expect((await request.patch('/api/v1/texts/'+id,{data:{archived:true,revision:text.revision}})).ok()).toBe(true);
+ }
 });

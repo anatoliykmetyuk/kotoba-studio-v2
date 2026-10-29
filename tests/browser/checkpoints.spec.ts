@@ -173,3 +173,30 @@ test('offline checkpoint completion and undo survive reload and recover without 
   await page.screenshot({path:info.outputPath('recovered-offline-checkpoints.png')});
  }finally{await context.setOffline(false);await page.close();await setting(request,previous.checkpointWords);await archive(request,text.id)}
 });
+
+test('closed lesson checkpoint sync remains available after Library reloads offline',async({page,context,request,browserName},info)=>{
+ test.skip(browserName==='webkit','WebKit offline emulation rejects service-worker responses: https://github.com/microsoft/playwright/issues/42775');
+ const previous=await(await request.get('/api/v1/settings')).json();const text=await fixture(request,'closed lesson '+info.project.name);
+ try{
+  await setting(request,10);await open(page,text.id);await page.waitForFunction(()=>navigator.serviceWorker.controller?.state==='activated');
+  await page.reload();await expect(page.locator('.book-body')).toBeVisible();
+  const selected=sections(text.sentences,10)[1],fraction=selected.words/text.sentences.reduce((sum,s)=>sum+s.tokens.length,0);
+  await context.setOffline(true);await checkbox(page,1).tap();await expect(checkbox(page,1)).toHaveAttribute('aria-checked','true');await expectProgress(page,fraction);
+  await page.locator('.reader .back-button').evaluate((button:HTMLButtonElement)=>button.click());await expect(page.getByRole('heading',{name:'Library',exact:true})).toBeVisible();
+  expect((await detail(request,text.id)).readingProgress).toBe(0);
+  // Observe the active Library refresh after acknowledgement. The lesson query
+  // is inactive throughout recovery, so it cannot refresh its own cached data.
+  const refreshed=page.waitForResponse(async response=>{
+   if(response.request().method()!=='GET'||new URL(response.url()).pathname!=='/api/v1/texts'||!response.ok())return false;
+   const items=await response.json();return items.some((item:Lesson)=>item.id===text.id&&Math.abs(item.readingProgress-fraction)<1e-8);
+  });
+  await context.setOffline(false);await expect.poll(async()=>(await detail(request,text.id)).readingProgress,{timeout:20_000}).toBeCloseTo(fraction,8);await refreshed;
+  await expect(page.getByRole('heading',{name:'Library',exact:true})).toBeVisible();
+  await context.setOffline(true);await page.reload();await expect(page.getByRole('heading',{name:'Library',exact:true})).toBeVisible();
+  const card=page.locator('.text-card').filter({has:page.getByRole('heading',{name:'Reading checkpoints closed lesson '+info.project.name,exact:true})});
+  await expect(card).toBeVisible();await card.click();await expect(page.locator('.book-body')).toBeVisible();
+  await expect(checkbox(page,1)).toHaveAttribute('aria-checked','true');await expect(checkbox(page,0)).toHaveAttribute('aria-checked','false');await expectProgress(page,fraction);
+  await expect(page.locator('.book-progress')).toContainText('Checkpoints saved');
+  await page.screenshot({path:info.outputPath('closed-lesson-sync-offline-reopen.png')});
+ }finally{await context.setOffline(false);await page.close();await setting(request,previous.checkpointWords);await archive(request,text.id)}
+});

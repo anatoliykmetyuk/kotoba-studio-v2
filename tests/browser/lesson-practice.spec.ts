@@ -42,16 +42,21 @@ test('finish a lesson and practice only its words, distractors and prepared sent
  await expect(page.getByRole('heading',{name:'Library',exact:true})).toBeVisible();
  await expect(page.locator('nav').getByRole('button',{name:'Practice',exact:true})).toHaveCount(0);
  await page.goto('/#'+first.id);await expect(page.locator('.reader')).toBeVisible();
- await page.getByRole('button',{name:'Complete text',exact:true}).click();
- const confirmation=page.getByRole('dialog',{name:'Complete lesson',exact:true});
- await expect(confirmation).toBeVisible();
- const preview=await(await request.get('/api/v1/texts/'+first.id+'/completion')).json();
- await expect(confirmation).toContainText(String(preview.wordCount));
- await confirmation.getByRole('button',{name:'Cancel',exact:true}).click();
- expect((await(await request.get('/api/v1/texts/'+first.id)).json()).textState).toBe('new');
- await page.getByRole('button',{name:'Complete text',exact:true}).click();
- await expect(confirmation).toBeVisible();await confirmation.getByRole('button',{name:'Complete lesson',exact:true}).click();
- await expect(page.getByRole('button',{name:'Mark as New',exact:true})).toBeVisible();
+ const checkpoints=page.locator('.book-body').getByRole('checkbox');
+ const checkpointCount=await checkpoints.count();expect(checkpointCount).toBeGreaterThan(0);
+ for(let index=0;index<checkpointCount;index++){
+  const checkpoint=checkpoints.nth(index);await expect(checkpoint).toHaveAttribute('aria-checked','false');
+  await checkpoint.tap();await expect(checkpoint).toHaveAttribute('aria-checked','true');
+ }
+ await expect(page.locator('.reader-toolbar .pill')).toHaveText('Completed');
+ await expect(page.getByRole('progressbar',{name:'Reading progress',exact:true})).toHaveAttribute('aria-valuenow','100');
+ await expect.poll(async()=>(await(await request.get('/api/v1/texts/'+first.id)).json()).textState).toBe('completed');
+ const lastCheckpoint=checkpoints.last();await lastCheckpoint.tap();await expect(lastCheckpoint).toHaveAttribute('aria-checked','false');
+ await expect(page.locator('.reader-toolbar .pill')).toHaveText('New');
+ await expect(page.getByRole('progressbar',{name:'Reading progress',exact:true})).not.toHaveAttribute('aria-valuenow','100');
+ await expect.poll(async()=>(await(await request.get('/api/v1/texts/'+first.id)).json()).textState).toBe('new');
+ await lastCheckpoint.tap();await expect(lastCheckpoint).toHaveAttribute('aria-checked','true');
+ await expect.poll(async()=>(await(await request.get('/api/v1/texts/'+first.id)).json()).textState).toBe('completed');
  const completed=await (await request.get('/api/v1/texts/'+first.id)).json() as TextItem;
  expect(completed.textState).toBe('completed');
  for(const id of lessonBases)expect((await request.put('/api/v1/words/'+id+'/status',{data:{state:'familiar'}})).ok()).toBeTruthy();

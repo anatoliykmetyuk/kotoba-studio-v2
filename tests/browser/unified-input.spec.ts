@@ -40,12 +40,20 @@ test('shared activation supports pen across navigation, Settings, forms and less
  await penTap(page,word.getByRole('button',{name:'Close word details',exact:true}),browserName);await expect(word).toHaveCount(0);
  await penTap(page,page.getByRole('button',{name:'Practice',exact:true}),browserName);await expect(page.getByRole('heading',{name:'Practice',exact:true})).toBeVisible();
  await penTap(page,page.getByRole('button',{name:'Back to lesson',exact:true}),browserName);await expect(page.locator('.book-body')).toBeVisible();
- // The completion confirmation is another native dialog using the same input path.
- const finish=page.getByRole('button',{name:'Complete text',exact:true});
- if(await finish.count()){
-  await penTap(page,finish,browserName);const confirmation=page.getByRole('dialog',{name:'Complete lesson',exact:true});await expect(confirmation).toBeVisible();
-  await penTap(page,confirmation.getByRole('button',{name:'Cancel',exact:true}),browserName);await expect(confirmation).toHaveCount(0);
+ // Section checkboxes use the same Pencil activation path as native actions.
+ const checkpoints=page.locator('.book-body').getByRole('checkbox');
+ const checkpointCount=await checkpoints.count();expect(checkpointCount).toBeGreaterThan(0);
+ for(let index=0;index<checkpointCount;index++){
+  const checkpoint=checkpoints.nth(index);
+  if(await checkpoint.getAttribute('aria-checked')==='false')await penTap(page,checkpoint,browserName);
+  await expect(checkpoint).toHaveAttribute('aria-checked','true');
  }
+ await expect(page.locator('.reader-toolbar .pill')).toHaveText('Completed');
+ await expect(page.getByRole('progressbar',{name:'Reading progress',exact:true})).toHaveAttribute('aria-valuenow','100');
+ const lastCheckpoint=checkpoints.last();await penTap(page,lastCheckpoint,browserName);
+ await expect(lastCheckpoint).toHaveAttribute('aria-checked','false');
+ await expect(page.locator('.reader-toolbar .pill')).toHaveText('New');
+ await expect(page.getByRole('progressbar',{name:'Reading progress',exact:true})).not.toHaveAttribute('aria-valuenow','100');
  await penTap(page,page.getByRole('button',{name:'Library',exact:true}).filter({has:page.locator('svg')}).last(),browserName);
  await expect(page.getByRole('heading',{name:'Library',exact:true})).toBeVisible();
  const explore=page.getByRole('button',{name:'Explore',exact:true});await penTap(page,explore,browserName);
