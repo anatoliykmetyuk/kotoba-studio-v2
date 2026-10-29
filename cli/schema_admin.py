@@ -21,6 +21,10 @@ with g.driver.session() as s:
    from cli.learning_status import apply
    learning_report=apply(t)
    migration_report=migration_report|({'learningStatus':learning_report} if p.get('migration')=='spelling-identity' else learning_report)
+  if p.get('migration') in ('reading-checkpoints','learning-status','spelling-identity'):
+   from cli.reading_checkpoints import apply
+   checkpoint_report=apply(t)
+   migration_report=migration_report|{'readingCheckpoints':checkpoint_report}
   for statement in p['statements']:
    if re.search(r'\b(CALL|LOAD|DROP|CONSTRAINT|INDEX|DATABASE|TRANSACTIONS|USER|ROLE)\b',statement['query'],re.I):raise InvalidGraph('Only data transformations are allowed')
    t.run(statement['query'],**statement.get('params',{}))

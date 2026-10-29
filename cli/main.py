@@ -98,8 +98,8 @@ def main():
  q=sub.add_parser('retokenize-apply');q.add_argument('--job',required=True);q.add_argument('--backup',type=Path,required=True);q.add_argument('--fingerprint',required=True)
  q=sub.add_parser('vocabulary-plan')
  q=sub.add_parser('vocabulary-apply');q.add_argument('--backup',type=Path,required=True);q.add_argument('--fingerprint',required=True)
- q=sub.add_parser('schema-plan');q.add_argument('--transformation',type=Path);q.add_argument('--migration',choices=['spelling-identity','learning-status'])
- q=sub.add_parser('schema-apply');q.add_argument('--transformation',type=Path);q.add_argument('--backup',type=Path,required=True);q.add_argument('--migration',choices=['spelling-identity','learning-status'])
+ q=sub.add_parser('schema-plan');q.add_argument('--transformation',type=Path);q.add_argument('--migration',choices=['spelling-identity','learning-status','reading-checkpoints'])
+ q=sub.add_parser('schema-apply');q.add_argument('--transformation',type=Path);q.add_argument('--backup',type=Path,required=True);q.add_argument('--migration',choices=['spelling-identity','learning-status','reading-checkpoints'])
  a=p.parse_args();runtime,env=environment(a.environment);url=a.url or 'http://127.0.0.1:'+env['KOTOBA_PORT']
  if a.command=='start':
   start_ichiran()

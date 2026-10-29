@@ -15,6 +15,7 @@ vocabulary <https://kotoba.local/core#> as core {
  scalar property body [ domain Entity range xsd:string functional ]
  scalar property textState [ domain Entity range TextState functional ]
  scalar property cursor [ domain Entity range xsd:integer functional ]
+ scalar property completed [ domain Entity range xsd:boolean functional ]
  scalar property archived [ domain Entity range xsd:boolean functional ]
  scalar property ordinal [ domain Entity range xsd:integer functional ]
  scalar property start [ domain Entity range xsd:integer functional ]

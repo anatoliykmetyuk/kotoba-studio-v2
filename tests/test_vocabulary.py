@@ -36,7 +36,7 @@ def old_corpus():
         ('Let 猫 ABX48 Z99。',0,[english,japanese,letters,number,z,unused_number]),
         ('48 犬。',len('Let 猫 ABX48 Z99。'),[number,dog])]):
         sentence=m.create('Sentence','sentence:'+digest(sentence_body),body=sentence_body)
-        placement=m.create('SentenceOccurrence',f'placement:{text["id"]}:{ordinal}',ordinal=ordinal,start=start,end=start+len(sentence_body))
+        placement=m.create('SentenceOccurrence',f'placement:{text["id"]}:{ordinal}',ordinal=ordinal,start=start,end=start+len(sentence_body),completed=True)
         m.link(text['id'],'PLACEMENT',placement['id']);m.link(placement['id'],'SENTENCE',sentence['id'])
         cursor=0
         for i,w in enumerate(parts):

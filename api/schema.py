@@ -67,6 +67,10 @@ def validate_graph(snapshot, schema=SCHEMA):
         if kind=='WordOccurrence' and len(incoming[id]['TOKEN'])!=1: raise InvalidGraph('Word occurrence requires one placement')
         if kind in ('SentenceOccurrence','WordOccurrence') and (p['start']<0 or p['end']<=p['start']): raise InvalidGraph('Invalid occurrence offsets')
         if kind=='Text' and not 0<=p['cursor']<=len(p['body']): raise InvalidGraph('Cursor outside text')
+        if kind=='Text' and 'completed' in schema['classes']['SentenceOccurrence']['required']:
+            placements=outgoing[id]['PLACEMENT']
+            if placements and (p['textState']=='completed')!=all(nodes[placement][1]['completed'] for placement in placements):
+                raise InvalidGraph('Text completion must match its sentence completion')
     active=[n for n in by_type['Schema'] if n['identityKey']=='schema:active']
     if len(active)!=1 or active[0]['digest']!=schema['digest']: raise InvalidGraph('Active schema must be preserved')
     for owner,rels in outgoing.items():

@@ -42,12 +42,14 @@ def test_stale_completion_scope_is_rejected_without_mutation(client):
     assert client.get('/api/v1/words/'+word).json()['statuses']['reading']['state']=='learning'
 
 
-def test_progress_after_retokenizing_partially_seen_verb_does_not_duplicate_encounters(client):
+def test_checkpoint_after_retokenizing_preserves_completion_and_encounters(client):
     text=import_lesson(client,'Retokenize partial read',[[('食べ','たべ','eat','食べる'),('た','た','past')]])
     g=app.state.graph
     # This dedicated test lesson starts inside the merged form, after 食べ.
-    g.write('test.cursor',lambda t:t.update(text['id'],cursor=0))
-    assert client.put('/api/v1/texts/'+text['id']+'/progress',json={'cursor':2}).status_code==200
+    g.write('test.cursor',lambda t:t.update(text['id'],cursor=2))
+    endpoint='/api/v1/texts/'+text['id']+'/checkpoint'
+    payload={'start':0,'end':len(text['body']),'completed':True}
+    assert client.put(endpoint,json=payload).status_code==200
     before=g.read(lambda t:t.snapshot());analysis=[]
     for row in g.read(lambda t:t.run('MATCH (s:Sentence)<-[:SENTENCE]-(p)-[:TOKEN]->(o)-[:WORD]->(w)-[:BASE_FORM]->(b) RETURN s.id AS id,s.body AS body,p.id AS placement,properties(o) AS o,properties(w) AS w,properties(b) AS b ORDER BY s.id,p.id,o.ordinal')):
         found=next((s for s in analysis if s['id']==row['id']),None)
@@ -63,9 +65,13 @@ def test_progress_after_retokenizing_partially_seen_verb_does_not_duplicate_enco
     expected=fingerprint(before)
     g.write('test.retokenize',lambda t:apply(t,analysis,expected))
     after=client.get('/api/v1/texts/'+text['id']).json();assert after['cursor']==2
-    response=client.put('/api/v1/texts/'+text['id']+'/progress',json={'cursor':3})
+    assert after['sentences'][0]['completed'] and after['readingProgress']==1
+    def encounters():return len(g.read(lambda t:t.run('MATCH (:Text {id:$id})-[:PLACEMENT]->()-[:TOKEN]->(o)<-[:OCCURRED_IN]-(e:Encounter) RETURN e.id AS id',id=text['id'])))
+    before_count=encounters()
+    assert client.put(endpoint,json=payload|{'completed':False}).status_code==200
+    response=client.put(endpoint,json=payload)
     assert response.status_code==200,response.text
-    assert response.json()['cursor']==3
+    assert encounters()==before_count
     assert client.get('/api/v1/graph/audit').json()['valid']
     snapshot=g.read(lambda t:t.snapshot());again,report=plan(snapshot,analysis)
     assert not report['created'] and not report['removed'] and report['changedPlacements']==0

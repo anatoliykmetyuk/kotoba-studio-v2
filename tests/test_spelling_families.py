@@ -32,7 +32,7 @@ def spelling_fixture(*, target=None, canonical_source=False, ambiguous=False):
     body='速く走った。'+('速く' if ambiguous else '早く')+'起きた。'
     text=node('Text','text:'+digest(body),title='Spelling repair fixture',body=body,textState='completed',cursor=4,archived=False)
     sentence=node('Sentence','sentence:'+digest(body),body=body)
-    place=node('SentenceOccurrence','placement:'+text+':0',ordinal=0,start=0,end=len(body))
+    place=node('SentenceOccurrence','placement:'+text+':0',ordinal=0,start=0,end=len(body),completed=True)
     edge(text,'PLACEMENT',place);edge(place,'SENTENCE',sentence)
     early=word('早い');speed=word('速く',None if canonical_source else early)
     early_form=word('早く',early)

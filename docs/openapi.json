@@ -356,10 +356,10 @@
         }
       }
     },
-    "/api/v1/texts/{id}/progress": {
+    "/api/v1/texts/{id}/checkpoint": {
       "put": {
-        "summary": "Progress",
-        "operationId": "progress_api_v1_texts__id__progress_put",
+        "summary": "Checkpoint",
+        "operationId": "checkpoint_api_v1_texts__id__checkpoint_put",
         "parameters": [
           {
             "name": "id",
@@ -369,6 +369,22 @@
               "type": "string",
               "title": "Id"
             }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
           }
         ],
         "requestBody": {
@@ -376,7 +392,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Cursor"
+                "$ref": "#/components/schemas/Checkpoint"
               }
             }
           }
@@ -2066,6 +2082,32 @@
         ],
         "title": "BatchStatuses"
       },
+      "Checkpoint": {
+        "properties": {
+          "start": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "End"
+          },
+          "completed": {
+            "type": "boolean",
+            "title": "Completed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "completed"
+        ],
+        "title": "Checkpoint"
+      },
       "Correction": {
         "properties": {
           "reading": {
@@ -2099,21 +2141,6 @@
         "additionalProperties": false,
         "type": "object",
         "title": "Correction"
-      },
-      "Cursor": {
-        "properties": {
-          "cursor": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Cursor"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "cursor"
-        ],
-        "title": "Cursor"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2728,6 +2755,19 @@
               }
             ],
             "title": "Furigana"
+          },
+          "checkpointWords": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 500.0,
+                "minimum": 10.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpointwords"
           },
           "area": {
             "anyOf": [

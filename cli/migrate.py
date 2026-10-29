@@ -74,6 +74,8 @@ def migrate(source:Path,output:Path,legacy_python:Path):
   count=len(tokens);position=min(max(0,old['reading_position']),count);cursor=tokens[position-1]['end'] if position else 0
   complete=count>0 and old['reading_position']>=count
   m.update(id,cursor=len(old['body']) if complete else cursor,textState='completed' if complete else 'new',createdAt=old['created_at'],updatedAt=old['updated_at'])
+  for owner,relation,placement in m.edges:
+   if owner==id and relation=='PLACEMENT':m.update(placement,completed=complete)
   detail={'legacyId':old['id'],'textId':id,'originalPosition':old['reading_position'],'selectableTokens':count,'statusInferred':'completed' if complete else 'new','completedAt':None}
   report['texts'].append(detail)
   p=m.create('Provenance',f'legacy:text:{old["id"]}',details=packed(detail));src=m.create('Source','source:legacy-sqlite',url='urn:kotoba:v1:sqlite:'+report['sourceSha256'],sourceType='legacy-sqlite');m.link(p['id'],'SOURCE',src['id']);m.link(id,'PROVENANCE',p['id'])

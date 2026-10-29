@@ -1,7 +1,5 @@
 import json,uuid
 from collections import Counter
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from api.graph import digest,uid,packed,now,Missing,Conflict
 from api.schema import InvalidGraph
 from api.language import analyze
@@ -120,7 +118,7 @@ def finalize_import(t,payload,result,report=None):
     imported_words={}
     for i,s in enumerate(result['sentences']):
         sentence=t.create('Sentence','sentence:'+digest(s['body']),body=s['body'])
-        place=t.create('SentenceOccurrence',f'placement:{text["id"]}:{i}',ordinal=i,start=s['start'],end=s['end'])
+        place=t.create('SentenceOccurrence',f'placement:{text["id"]}:{i}',ordinal=i,start=s['start'],end=s['end'],completed=False)
         t.link(text['id'],'PLACEMENT',place['id']);t.link(place['id'],'SENTENCE',sentence['id'])
         for k,token in enumerate(eligible_tokens(s['body'],s['tokens'])):
             choice=token['selected'];key=(token['surface'],packed(choice),packed(token.get('meanings',[])))
@@ -152,12 +150,25 @@ def text_detail(t,id):
     sources=t.run('MATCH (t:Text {id:$id})-[:PROVENANCE]->(p)-[:SOURCE]->(s) RETURN properties(s) AS source',id=id)
     memberships=t.run('MATCH (f:Folder)-[:CONTAINS]->(:Text {id:$id}) RETURN properties(f) AS folder ORDER BY f.name',id=id)
     phrases=t.run('MATCH (t:Text {id:$id})-[:PHRASE]->(p) OPTIONAL MATCH (p)-[:STATUS]->(s) RETURN properties(p) AS phrase, collect(properties(s)) AS states',id=id)
-    return text|{'sentences':list(groups.values()),'sources':[x['source'] for x in sources],'phrases':phrases,'folders':[r['folder'] for r in memberships]}
+    return text|{'readingProgress':reading_progress(groups.values()) if groups else (1.0 if text['textState']=='completed' else 0.0),'sentences':list(groups.values()),'sources':[x['source'] for x in sources],'phrases':phrases,'folders':[r['folder'] for r in memberships]}
 
 def library(t):
-    rows=t.run('''MATCH (t:Text) OPTIONAL MATCH (f:Folder)-[:CONTAINS]->(t)
-    RETURN properties(t) AS text,collect(properties(f)) AS folders ORDER BY text.createdAt DESC,text.id''')
-    return [r['text']|{'folders':r['folders'],'bodyLength':len(r['text']['body']),'excerpt':r['text']['body'][:100]} for r in rows]
+    rows=t.run('''MATCH (t:Text)
+    CALL (t) {
+      OPTIONAL MATCH (t)-[:PLACEMENT]->(p)
+      WITH p,CASE WHEN p IS NULL THEN 0 ELSE count { (p)-[:TOKEN]->() } END AS words
+      WITH p,CASE WHEN p IS NULL THEN 0 WHEN words=0 THEN 1 ELSE words END AS weight
+      RETURN sum(weight) AS total,sum(CASE WHEN p.completed THEN weight ELSE 0 END) AS completed
+    }
+    OPTIONAL MATCH (f:Folder)-[:CONTAINS]->(t)
+    RETURN properties(t) AS text,collect(properties(f)) AS folders,total,completed ORDER BY text.createdAt DESC,text.id''')
+    return [r['text']|{'readingProgress':r['completed']/r['total'] if r['total'] else (1.0 if r['text']['textState']=='completed' else 0.0),'folders':r['folders'],'bodyLength':len(r['text']['body']),'excerpt':r['text']['body'][:100]} for r in rows]
+
+
+def reading_progress(sentences):
+    weights=[(max(1,len(s['tokens'])),s['completed']) for s in sentences]
+    total=sum(weight for weight,_ in weights)
+    return sum(weight for weight,completed in weights if completed)/total if total else 0.0
 
 def word_meanings(t,id):
     meanings=t.run('''MATCH (w:Word {id:$id})-[:BASE_FORM]->(b) WITH [w,b] AS owners
@@ -171,7 +182,7 @@ def word_detail(t,id):
     base=t.get(w['family'])
     forms=t.run('MATCH (w:Word)-[:BASE_FORM]->(b:Word {id:$id}) RETURN properties(w) AS w ORDER BY w.surface',id=base['id'])
     examples=t.run('''MATCH (t:Text)-[:PLACEMENT]->(p)-[:TOKEN]->(o)-[:WORD]->(w:Word)-[:BASE_FORM]->(b:Word {id:$id})
-    MATCH (p)-[:SENTENCE]->(s) RETURN DISTINCT t.id AS textId,t.title AS title,t.textState AS textState,s.id AS sentenceId,p.id AS occurrenceId,s.body AS body,p.start AS start,p.end<=t.cursor AS seen ORDER BY title,start LIMIT 50''',id=base['id'])
+    MATCH (p)-[:SENTENCE]->(s) RETURN DISTINCT t.id AS textId,t.title AS title,t.textState AS textState,s.id AS sentenceId,p.id AS occurrenceId,s.body AS body,p.start AS start,p.completed AS seen ORDER BY title,start LIMIT 50''',id=base['id'])
     meanings=word_meanings(t,id)
     status=learning_status(t,base['id'])
     return w|{'meaning':'; '.join(m['body'] for m in meanings),'meanings':meanings,'base':base,'status':status,'statuses':{area:status for area in AREAS},'forms':[x['w'] for x in forms],'examples':examples}
@@ -198,29 +209,18 @@ def text_state(t,id,state,revision=None):
     if state not in ('new','completed'):raise ValueError('Invalid text status')
     text=t.get(id)
     if text['type']!='Text':raise Missing('Text not found')
-    updated=t.update(id,expected=revision,textState=state,cursor=len(text['body']) if state=='completed' else text['cursor'])
-    return updated
+    if revision is not None and revision!=text['revision']:raise Conflict('This record changed. Reload and retry.')
+    t.run("""MATCH (:Text {id:$id})-[:PLACEMENT]->(p)
+        WHERE p.completed<>$completed
+        SET p.completed=$completed,p.revision=p.revision+1,p.updatedAt=$stamp""",
+        id=id,completed=state=='completed',stamp=now())
+    return t.update(id,textState=state,cursor=len(text['body']) if state=='completed' else text['cursor'])
 
-def progress(t,id,cursor):
-    text=t.get(id)
-    if text['type']!='Text':raise Missing('Text not found')
-    cursor=max(text['cursor'],min(len(text['body']),max(0,cursor)))
-    if cursor>text['cursor']:
-        reached=t.run('''MATCH (t:Text {id:$id})-[:PLACEMENT]->(p)-[:TOKEN]->(o)
-        WHERE p.start+o.end>$old AND p.start+o.end<=$cursor
-            AND NOT EXISTS { MATCH (:Encounter {area:'reading'})-[:OCCURRED_IN]->(o) }
-            RETURN o.id AS id''',id=id,old=text['cursor'],cursor=cursor)
-        for r in reached:
-            e=t.create('Encounter','encounter:reading:'+r['id'],area='reading',evidence='reader-progress');t.link(e['id'],'OCCURRED_IN',r['id'])
-        day=datetime.now(ZoneInfo('Asia/Tokyo')).date().isoformat()
-        t.create('Activity','activity:'+uid(),day=day,kind='reading',amount=len(reached),details=packed({'textId':id}))
-        return t.update(id,cursor=cursor)
-    return text
 
 def explore(t,query='',area='reading',minimum=0,seen='all',word_id=None,offset=0,limit=100):
     if area is not None and area not in AREAS or seen not in ('all','seen','unseen') or not 0<=minimum<=1:raise ValueError('Invalid exploration filter')
     start="MATCH (t:Text)-[:PLACEMENT]->(p)-[:SENTENCE]->(s)" if word_id is None else "MATCH (selected:Word {id:$word})<-[:BASE_FORM*0..1]-(w:Word)<-[:WORD]-()<-[:TOKEN]-(p)<-[:PLACEMENT]-(t:Text) MATCH (p)-[:SENTENCE]->(s)"
-    rows=t.run(start+''' WHERE t.archived=false AND ($seen='all' OR (p.end<=t.cursor)=($seen='seen'))
+    rows=t.run(start+''' WHERE t.archived=false AND ($seen='all' OR (p.completed)=($seen='seen'))
       AND ($q='' OR toLower(s.body+' '+t.title) CONTAINS $q OR EXISTS {
         MATCH (p)-[:TOKEN]->()-[:WORD]->(w)-[:BASE_FORM]->(b)
         WHERE toLower(b.surface) CONTAINS $q OR EXISTS { MATCH (w)-[:HAS_MEANING]->(m) WHERE toLower(m.body) CONTAINS $q }
@@ -233,7 +233,7 @@ def explore(t,query='',area='reading',minimum=0,seen='all',word_id=None,offset=0
       WITH t,p,s,o,w,b,st,reduce(unique=[],m IN [(b)-[:HAS_MEANING]->(m) | m.body]+[(w)-[:HAS_MEANING]->(m) | m.body] | CASE WHEN m IN unique THEN unique ELSE unique+[m] END) AS meanings ORDER BY o.ordinal
       WITH t,p,s,collect({surface:w.surface,reading:o.reading,occurrenceId:o.id,base:b.surface,baseReading:b.reading,meaning:coalesce(head(meanings),''),baseId:b.id,state:st.state,wordId:w.id,start:o.start,end:o.end}) AS words,
            sum(CASE st.state WHEN 'known' THEN 1.0 ELSE 0.0 END)/count(*) AS coverage
-      RETURN t.id AS textId,t.title AS title,t.textState AS textState,p.id AS occurrenceId,s.id AS sentenceId,s.body AS body,p.start AS start,p.end<=t.cursor AS seen,words,coverage
+      RETURN t.id AS textId,t.title AS title,t.textState AS textState,p.id AS occurrenceId,s.id AS sentenceId,s.body AS body,p.start AS start,p.completed AS seen,words,coverage
       ORDER BY t.updatedAt DESC,p.ordinal''',area=area,seen=seen,word=word_id,q=query.casefold(),minimum=minimum,offset=max(0,offset),limit=max(1,min(500,limit)))
     return [r|{'counts':dict(Counter(w['state'] for w in r['words']))} for r in rows]
 

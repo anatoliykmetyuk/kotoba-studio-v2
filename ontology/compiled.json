@@ -73,6 +73,7 @@
         "revision": 1,
         "createdAt": 1,
         "updatedAt": 1,
+        "completed": 1,
         "ordinal": 1,
         "start": 1,
         "end": 1
@@ -402,6 +403,7 @@
     "body": "string",
     "textState": "TextState",
     "cursor": "integer",
+    "completed": "boolean",
     "archived": "boolean",
     "ordinal": "integer",
     "start": "integer",
@@ -629,5 +631,5 @@
       ]
     ]
   },
-  "digest": "6ccb821a99c7dfd3c7044ac064967f74d840d79c4c5d0193c82100de5f5ce5ce"
+  "digest": "661391481d38f4dd82ac928a621f99d012609e28104537061a6240aa41fce80c"
 }

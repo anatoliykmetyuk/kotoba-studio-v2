@@ -16,7 +16,7 @@ def fixture():
     def edge(a,r,b):edges.append({'from':a,'type':r,'to':b,'properties':{}})
     node('Schema','schema:active',digest=SCHEMA['digest'],version=SCHEMA['version'])
     body='食べた。私にとって。';text=node('Text','text:'+digest(body),title='Retokenize fixture',body=body,textState='new',cursor=4,archived=False)
-    sentence=node('Sentence','sentence:'+digest(body),body=body);place=node('SentenceOccurrence','placement:'+text+':0',ordinal=0,start=0,end=len(body));edge(text,'PLACEMENT',place);edge(place,'SENTENCE',sentence)
+    sentence=node('Sentence','sentence:'+digest(body),body=body);place=node('SentenceOccurrence','placement:'+text+':0',ordinal=0,start=0,end=len(body),completed=False);edge(text,'PLACEMENT',place);edge(place,'SENTENCE',sentence)
     words={}
     def word(surface,base=None):
         base=base or surface

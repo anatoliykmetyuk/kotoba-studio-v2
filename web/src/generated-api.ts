@@ -158,7 +158,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/texts/{id}/progress": {
+    "/api/v1/texts/{id}/checkpoint": {
         parameters: {
             query?: never;
             header?: never;
@@ -166,8 +166,8 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Progress */
-        put: operations["progress_api_v1_texts__id__progress_put"];
+        /** Checkpoint */
+        put: operations["checkpoint_api_v1_texts__id__checkpoint_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -843,6 +843,15 @@ export interface components {
              */
             state: "new" | "learning" | "familiar" | "known";
         };
+        /** Checkpoint */
+        Checkpoint: {
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Completed */
+            completed: boolean;
+        };
         /** Correction */
         Correction: {
             /** Reading */
@@ -854,11 +863,6 @@ export interface components {
              * @default false
              */
             baseForm: boolean;
-        };
-        /** Cursor */
-        Cursor: {
-            /** Cursor */
-            cursor: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1083,6 +1087,8 @@ export interface components {
             readerLayout?: "book" | null;
             /** Furigana */
             furigana?: boolean | null;
+            /** Checkpointwords */
+            checkpointWords?: number | null;
             /** Area */
             area?: ("reading" | "listening") | null;
         };
@@ -1516,10 +1522,12 @@ export interface operations {
             };
         };
     };
-    progress_api_v1_texts__id__progress_put: {
+    checkpoint_api_v1_texts__id__checkpoint_put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "idempotency-key"?: string | null;
+            };
             path: {
                 id: string;
             };
@@ -1527,7 +1535,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Cursor"];
+                "application/json": components["schemas"]["Checkpoint"];
             };
         };
         responses: {

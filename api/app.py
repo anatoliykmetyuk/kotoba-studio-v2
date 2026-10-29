@@ -75,7 +75,10 @@ class TextStatus(Strict):
     state:Literal['new','completed']
     revision:int|None=None
     completionFingerprint:str|None=Field(default=None,min_length=64,max_length=64,pattern='^[0-9a-f]+$')
-class Cursor(Strict):cursor:int=Field(ge=0)
+class Checkpoint(Strict):
+    start:int=Field(ge=0)
+    end:int=Field(gt=0)
+    completed:bool
 class Metadata(Strict):
     title:str|None=Field(default=None,min_length=1,max_length=200)
     archived:bool|None=None
@@ -135,6 +138,7 @@ class SettingsPatch(Strict):
     lineHeight:float|None=Field(default=None,ge=1.4,le=2.4)
     readerLayout:Literal['book']|None=None
     furigana:bool|None=None
+    checkpointWords:int|None=Field(default=None,ge=10,le=500)
     area:Literal['reading','listening']|None=None
 
 class PracticeAnswer(Strict):
@@ -223,8 +227,10 @@ def text_status(id:str,p:TextStatus):
             return finish(t,id,p.revision,p.completionFingerprint)
         return domain.text_state(t,id,p.state,p.revision)
     return graph().write('text.status',change)
-@app.put('/api/v1/texts/{id}/progress')
-def progress(id:str,p:Cursor):return graph().write('text.progress',lambda t:domain.progress(t,id,p.cursor))
+@app.put('/api/v1/texts/{id}/checkpoint')
+def checkpoint(id:str,p:Checkpoint,idempotency_key:str|None=Header(default=None)):
+    from api.completion import checkpoint
+    return graph().write('text.checkpoint',lambda t:checkpoint(t,id,p.start,p.end,p.completed),idempotency_key)
 @app.get('/api/v1/words/{id}')
 def word(id:str):return graph().read(lambda t:domain.word_detail(t,id))
 @app.post('/api/v1/words/{id}/meanings',response_model=WordMeaningsResult,response_model_exclude_none=True)
@@ -398,7 +404,7 @@ def translation(p:Translate):
     return graph().write('translation.request',create)
 @app.get('/api/v1/settings')
 def settings():
-    s=graph().read(lambda t:t.find('settings:user'));return json.loads(s['payload']) if s else {'theme':'system','fontSize':20,'lineHeight':1.85,'readerLayout':'book','furigana':True}
+    s=graph().read(lambda t:t.find('settings:user'));return {'theme':'system','fontSize':20,'lineHeight':1.85,'readerLayout':'book','furigana':True,'checkpointWords':100}|(json.loads(s['payload']) if s else {})
 @app.put('/api/v1/settings')
 def save_settings(p:dict[str,Any]):
     def save(t):
@@ -438,7 +444,7 @@ def practice(textId:str=QueryParam(min_length=1),area:Literal['reading','listeni
           WITH t,p,s,collect({surface:w.surface,reading:o.reading,occurrenceId:o.id,base:b.surface,baseReading:b.reading,meaning:coalesce(meaning,''),baseId:b.id,state:st.state,wordId:w.id,start:o.start,end:o.end}) AS words,
                sum(CASE st.state WHEN 'known' THEN 1.0 ELSE 0.0 END)/count(*) AS coverage
           WHERE any(w IN words WHERE w.state IN $states)
-          RETURN t.id AS textId,t.title AS title,t.textState AS textState,p.id AS occurrenceId,s.id AS sentenceId,s.body AS body,p.start AS start,p.end<=t.cursor AS seen,words,coverage
+          RETURN t.id AS textId,t.title AS title,t.textState AS textState,p.id AS occurrenceId,s.id AS sentenceId,s.body AS body,p.start AS start,p.completed AS seen,words,coverage
           ORDER BY p.ordinal''',text=textId,area=area,states=sorted(allowed))
         return [r|{'counts':{state:sum(w['state']==state for w in r['words']) for state in domain.STATES}} for r in rows]
     examples=graph().read(lesson);pool={}
