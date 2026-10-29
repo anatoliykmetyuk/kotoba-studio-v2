@@ -80,6 +80,10 @@ class Checkpoint(Strict):
     start:int=Field(ge=0)
     end:int=Field(gt=0)
     completed:bool
+class CheckpointChange(Checkpoint):
+    requestId:str=Field(min_length=1,max_length=128)
+class CheckpointBatch(Strict):
+    changes:list[CheckpointChange]=Field(min_length=1,max_length=50)
 class Metadata(Strict):
     title:str|None=Field(default=None,min_length=1,max_length=200)
     archived:bool|None=None
@@ -237,7 +241,17 @@ def text_status(id:str,p:TextStatus):
 @app.put('/api/v1/texts/{id}/checkpoint')
 def checkpoint(id:str,p:Checkpoint,idempotency_key:str|None=Header(default=None)):
     from api.completion import checkpoint
-    return graph().write('text.checkpoint',lambda t:checkpoint(t,id,p.start,p.end,p.completed),idempotency_key)
+    result=graph().write('text.checkpoint',lambda t:checkpoint(t,id,p.start,p.end,p.completed),idempotency_key)
+    # A partially acknowledged batch can later retry its remaining action on
+    # this original route. Compact receipts must still yield the full Text.
+    if 'textId' in result:
+        if result['textId']!=id:raise Conflict('Checkpoint request belongs to a different lesson')
+        return graph().read(lambda t:domain.text_detail(t,id))|{'markedKnown':0}
+    return result
+@app.post('/api/v1/texts/{id}/checkpoints')
+def checkpoints(id:str,p:CheckpointBatch):
+    from api.completion import checkpoints
+    return graph().write('text.checkpoints',lambda t:checkpoints(t,id,[change.model_dump() for change in p.changes]))
 @app.get('/api/v1/words/{id}')
 def word(id:str):return graph().read(lambda t:domain.word_detail(t,id))
 @app.get('/api/v1/words/{id}/examples',response_model=WordExamplesResult)

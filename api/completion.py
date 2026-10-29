@@ -1,4 +1,5 @@
 """Explicit section completion and atomic promotion of untouched vocabulary."""
+import json
 from api import domain
 from api.graph import Conflict,Missing,digest,packed,now,uid
 from api.schema import validate_properties
@@ -56,7 +57,7 @@ def record_encounters(t,text_id,placement_ids):
                  kind='reading',amount=len(rows),details=packed({'textId':text_id}))
 
 
-def checkpoint(t,id,start,end,completed):
+def checkpoint(t,id,start,end,completed,*,include_detail=True):
     text=t.get(id)
     if text['type']!='Text':raise Missing('Text not found')
     if start>=end or end>len(text['body']):raise ValueError('Invalid checkpoint range')
@@ -83,4 +84,26 @@ def checkpoint(t,id,start,end,completed):
         remaining=t.run('''MATCH (:Text {id:$id})-[:PLACEMENT]->(p)
             RETURN count(CASE WHEN p.completed=false THEN 1 END) AS remaining''',id=id)[0]['remaining']
         t.update(id,textState='new' if remaining else 'completed')
+    return (domain.text_detail(t,id) if include_detail else {})|{'markedKnown':marked}
+
+
+def checkpoints(t,id,changes):
+    """Apply ordered, individually idempotent actions under one writer lock."""
+    text=t.get(id)
+    if text['type']!='Text':raise Missing('Text not found')
+    marked=0
+    for change in changes:
+        key='mutation:'+change['requestId']
+        receipt=t.find(key)
+        if receipt:
+            result=json.loads(receipt['result'])
+            # Earlier single requests stored the full Text response. New batch
+            # receipts retain only the action and its owner, never a Text copy.
+            owner=result.get('textId',result.get('id')) if isinstance(result,dict) else None
+            if owner!=id:raise Conflict('Checkpoint request belongs to a different lesson')
+            continue
+        result=checkpoint(t,id,change['start'],change['end'],change['completed'],include_detail=False)
+        marked+=result['markedKnown']
+        t.create('Mutation',key,result=packed({'textId':id,'start':change['start'],
+                                             'end':change['end'],'completed':change['completed']}))
     return domain.text_detail(t,id)|{'markedKnown':marked}
