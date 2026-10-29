@@ -1,6 +1,7 @@
 """Explicit section completion and atomic promotion of untouched vocabulary."""
 from api import domain
-from api.graph import Conflict,Missing,digest,packed,now
+from api.graph import Conflict,Missing,digest,packed,now,uid
+from api.schema import validate_properties
 
 
 def preview(t,id):
@@ -36,13 +37,21 @@ def record_encounters(t,text_id,placement_ids):
           MATCH (:Encounter {area:'reading'})-[:OCCURRED_IN]->(o)
         }
         RETURN o.id AS id''',id=text_id,placements=placement_ids)
-    for row in rows:
-        encounter=t.create('Encounter','encounter:reading:'+row['id'],area='reading',evidence='reader-checkpoint')
-        t.link(encounter['id'],'OCCURRED_IN',row['id'])
     if rows:
+        stamp=now();encounters=[]
+        for row in rows:
+            props={'id':uid(),'identityKey':'encounter:reading:'+row['id'],'revision':0,
+                   'createdAt':stamp,'updatedAt':stamp,'area':'reading','evidence':'reader-checkpoint'}
+            validate_properties('Encounter',props)
+            encounters.append({'occurrenceId':row['id'],'properties':props})
+        # Missing occurrences were discovered under the shared graph writer
+        # lock. Create their validated nodes and edges in one round trip.
+        t.run('''UNWIND $encounters AS encounter
+            MATCH (o:WordOccurrence {id:encounter.occurrenceId})
+            CREATE (e:Entity:Encounter) SET e=encounter.properties
+            CREATE (e)-[:OCCURRED_IN]->(o)''',encounters=encounters)
         from datetime import datetime
         from zoneinfo import ZoneInfo
-        from api.graph import uid
         t.create('Activity','activity:'+uid(),day=datetime.now(ZoneInfo('Asia/Tokyo')).date().isoformat(),
                  kind='reading',amount=len(rows),details=packed({'textId':text_id}))
 
