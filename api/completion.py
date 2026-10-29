@@ -87,23 +87,33 @@ def checkpoint(t,id,start,end,completed,*,include_detail=True):
     return (domain.text_detail(t,id) if include_detail else {})|{'markedKnown':marked}
 
 
+def _checkpoint_receipt(t,id,request_id):
+    receipt=t.find('mutation:'+request_id)
+    if not receipt:return False
+    result=json.loads(receipt['result'])
+    # Earlier single requests stored the full Text response. New batch
+    # receipts retain only the action and its owner, never a Text copy.
+    owner=result.get('textId',result.get('id')) if isinstance(result,dict) else None
+    if owner!=id:raise Conflict('Checkpoint request belongs to a different lesson')
+    return True
+
+
+def cached_checkpoints(t,id,changes):
+    """A fully committed replay needs no writer lock, audit or validation scan."""
+    committed=[_checkpoint_receipt(t,id,change['requestId']) for change in changes]
+    if all(committed):return domain.text_detail(t,id)|{'markedKnown':0}
+    return None
+
+
 def checkpoints(t,id,changes):
     """Apply ordered, individually idempotent actions under one writer lock."""
     text=t.get(id)
     if text['type']!='Text':raise Missing('Text not found')
     marked=0
     for change in changes:
-        key='mutation:'+change['requestId']
-        receipt=t.find(key)
-        if receipt:
-            result=json.loads(receipt['result'])
-            # Earlier single requests stored the full Text response. New batch
-            # receipts retain only the action and its owner, never a Text copy.
-            owner=result.get('textId',result.get('id')) if isinstance(result,dict) else None
-            if owner!=id:raise Conflict('Checkpoint request belongs to a different lesson')
-            continue
+        if _checkpoint_receipt(t,id,change['requestId']):continue
         result=checkpoint(t,id,change['start'],change['end'],change['completed'],include_detail=False)
         marked+=result['markedKnown']
-        t.create('Mutation',key,result=packed({'textId':id,'start':change['start'],
-                                             'end':change['end'],'completed':change['completed']}))
+        t.create('Mutation','mutation:'+change['requestId'],result=packed({'textId':id,'start':change['start'],
+                                                                        'end':change['end'],'completed':change['completed']}))
     return domain.text_detail(t,id)|{'markedKnown':marked}

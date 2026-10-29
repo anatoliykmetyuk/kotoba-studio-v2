@@ -81,6 +81,7 @@ def test_api_batch_has_one_structural_transaction_and_later_failure_rolls_back(b
     tx, calls, details = batch
     writes = []
     class Graph:
+        def read(self, fn):return fn(tx)
         def write(self, action, fn, *args, **kwargs):
             writes.append((action, args, kwargs))
             before = copy.deepcopy((tx.nodes, tx.keys))
@@ -94,6 +95,43 @@ def test_api_batch_has_one_structural_transaction_and_later_failure_rolls_back(b
     assert writes == [('text.checkpoints', (), {})]
     assert tx.find('mutation:valid') is None and tx.find('mutation:invalid') is None
     assert 'completed' not in tx.get('lesson') and not details
+
+
+def test_fully_receipted_batch_replay_is_read_only_and_returns_current_text(batch, monkeypatch):
+    tx, calls, details = batch
+    tx.create('Mutation', 'mutation:compact', result=packed({'textId': 'lesson', 'completed': True}))
+    tx.create('Mutation', 'mutation:legacy', result=packed({'id': 'lesson', 'completed': True}))
+    tx.update('lesson', completed=False)
+    class Graph:
+        def read(self, fn):return fn(tx)
+        def write(self, *_args, **_kwargs):pytest.fail('Committed batch replay must be read-only')
+    monkeypatch.setattr(api, 'graph', Graph)
+    result = api.checkpoints('lesson', api.CheckpointBatch(changes=[change('compact'), change('legacy')]))
+    assert result['id'] == 'lesson' and result['completed'] is False and result['markedKnown'] == 0
+    assert not calls and details == ['lesson']
+
+
+def test_missing_receipt_uses_writer_and_rechecks_receipts_committed_after_the_read(batch, monkeypatch):
+    tx, calls, details = batch
+    writes = []
+    class Graph:
+        def read(self, fn):return fn(tx)
+        def write(self, action, fn):
+            writes.append(action)
+            tx.create('Mutation', 'mutation:raced', result=packed({'textId': 'lesson'}))
+            return fn(tx)
+    monkeypatch.setattr(api, 'graph', Graph)
+    result = api.checkpoints('lesson', api.CheckpointBatch(changes=[change('raced'), change('new', start=2, end=4)]))
+    assert writes == ['text.checkpoints'] and calls == [('lesson', 2, 4, True)]
+    assert result['markedKnown'] == 1 and details == ['lesson']
+
+
+def test_read_fast_path_checks_later_receipt_owners_even_if_an_earlier_action_is_missing(batch):
+    tx, calls, details = batch
+    tx.create('Mutation', 'mutation:wrong', result=packed({'textId': 'another'}))
+    with pytest.raises(Conflict, match='different lesson'):
+        completion.cached_checkpoints(tx, 'lesson', [change('missing'), change('wrong')])
+    assert not calls and not details
 
 
 def test_single_route_replay_of_compact_batch_receipt_still_returns_full_text(batch, monkeypatch):

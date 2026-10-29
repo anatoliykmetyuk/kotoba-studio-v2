@@ -250,8 +250,11 @@ def checkpoint(id:str,p:Checkpoint,idempotency_key:str|None=Header(default=None)
     return result
 @app.post('/api/v1/texts/{id}/checkpoints')
 def checkpoints(id:str,p:CheckpointBatch):
-    from api.completion import checkpoints
-    return graph().write('text.checkpoints',lambda t:checkpoints(t,id,[change.model_dump() for change in p.changes]))
+    from api.completion import cached_checkpoints,checkpoints
+    changes=[change.model_dump() for change in p.changes]
+    cached=graph().read(lambda t:cached_checkpoints(t,id,changes))
+    if cached is not None:return cached
+    return graph().write('text.checkpoints',lambda t:checkpoints(t,id,changes))
 @app.get('/api/v1/words/{id}')
 def word(id:str):return graph().read(lambda t:domain.word_detail(t,id))
 @app.get('/api/v1/words/{id}/examples',response_model=WordExamplesResult)
