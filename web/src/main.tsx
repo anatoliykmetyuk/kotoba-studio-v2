@@ -1,4 +1,4 @@
-import React,{useState,useEffect,useLayoutEffect,useRef,useMemo} from 'react';
+import React,{useState,useEffect,useLayoutEffect,useRef,useMemo,useSyncExternalStore} from 'react';
 import {createRoot} from 'react-dom/client';
 import {QueryClient,QueryClientProvider,useQuery,useQueryClient} from '@tanstack/react-query';
 import {BookOpen,Search,Plus,ArrowLeft,ArrowUpRight,Check,X,Volume2,Settings2,ChevronRight,MoreHorizontal,RefreshCw,Layers,Play,Sparkles,Folder,SlidersHorizontal,Download} from 'lucide-react';
@@ -20,6 +20,7 @@ import {CopyButton} from './copy-button';
 import {MissingMeanings} from './missing-meanings';
 import {usePopupScrollLock} from './popup-scroll-lock';
 import {FuriganaText} from './furigana-text';
+import {wordStatuses,displayTextStatuses,patchTextStatus,patchWordStatus,type LearningState} from './word-status';
 import {FolderSelector,ImportFiling,scheduleImportFiling,type ExistingFolder} from './import-filing';
 const qc=new QueryClient({defaultOptions:{queries:{retry:1,refetchOnWindowFocus:true,staleTime:2000}}});
 const sliceText=(s:string,start:number,end?:number)=>Array.from(s).slice(start,end).join('');
@@ -43,17 +44,28 @@ function App(){
  const {data:storedLibrary=[],isLoading:libraryLoading,error:libraryError}=useData<TextItem[]>(['library'],'/texts');
  const library=storedLibrary.map(item=>{const cached=client.getQueryData<TextItem>(['text',item.id]);if(!cached||!checkpointQueue.some(change=>change.textId===item.id))return item;const pending=queuedText(cached,checkpointQueue);return {...item,readingProgress:pending.readingProgress,textState:pending.textState}});
  const {data:storedText,error:textError}=useData<TextItem>(['text',textId],'/texts/'+textId,!!textId);
- const text=storedText?queuedText(storedText,checkpointQueue):undefined;
+ const statusSnapshot=useSyncExternalStore(wordStatuses.subscribe,wordStatuses.getSnapshot);
+ const text=storedText?displayTextStatuses(queuedText(displayTextStatuses(storedText,wordStatuses.getConfirmedSnapshot()),checkpointQueue),statusSnapshot,true):undefined;
  const {data:health}=useQuery({queryKey:['health'],queryFn:()=>api<{ready:boolean;workerReady:boolean}>('/health'),refetchInterval:15000});
  const {audioRef,busy,speak,enqueue,stop:stopSpeech}=useSpeech(setError);const settingsPending=useRef<Partial<Settings>>({});const settingsTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
- const statusQueues=useRef(new Map<string,Promise<{state:State;revision:number}>>());const statusRevisions=useRef(new Map<string,number>());
+ useEffect(()=>{
+  function saved(event:Event){
+   const {baseId,status}=(event as CustomEvent<{baseId:string;status:LearningState}>).detail;
+   client.setQueriesData<TextItem>({queryKey:['text']},old=>old?patchTextStatus(old,baseId,status):old);
+   client.setQueriesData<WordDetail>({queryKey:['word']},old=>old?patchWordStatus(old,baseId,status):old);
+   setSelected(old=>old?.baseId===baseId&&old.statusRevision<=status.revision?{...old,state:status.state,statusRevision:status.revision}:old);
+   for(const key of ['explore','practice'])void client.invalidateQueries({queryKey:[key],refetchType:'none'});
+   navigator.serviceWorker?.controller?.postMessage({type:'word-status',baseId,status});
+  }
+  addEventListener('kotoba:word-status-saved',saved);return()=>removeEventListener('kotoba:word-status-saved',saved);
+ },[client]);
  const [destination,setDestination]=useState<{id:string;occurrenceId:string;key:number}|null>(null);
  const [range,setRange]=useState<PhraseRange|null>(null);const [phraseReady,setPhraseReady]=useState(false);
  useEffect(()=>{document.documentElement.dataset.theme=settings.theme},[settings.theme]);
  useEffect(()=>{function route(){stopSpeech();const [hash,query]=location.hash.slice(1).split('?');setSelected(null);setRange(null);setPhraseReady(false);if(hash==='explore'){setView('explore');setTextId(null)}else if(hash&&hash!=='practice'){setTextId(hash);setView(new URLSearchParams(query).get('mode')==='practice'?'practice':'read')}else{setView('library');setTextId(null)}}route();addEventListener('hashchange',route);return()=>removeEventListener('hashchange',route)},[]);
  useEffect(()=>{if(!notice)return;const id=setTimeout(()=>setNotice(''),3500);return()=>clearTimeout(id)},[notice]);
  async function perform(fn:()=>Promise<unknown>){setError('');try{await fn()}catch(e){setError((e as Error).message)}}
- function refresh(){client.invalidateQueries({queryKey:['text']});client.invalidateQueries({queryKey:['library']});client.invalidateQueries({queryKey:['word']});client.invalidateQueries({queryKey:['explore']});client.invalidateQueries({queryKey:['practice']});client.invalidateQueries({queryKey:['activity']})}
+ function refresh(){client.invalidateQueries({queryKey:['word-examples'],refetchType:'none'});client.invalidateQueries({queryKey:['text']});client.invalidateQueries({queryKey:['library']});client.invalidateQueries({queryKey:['word']});client.invalidateQueries({queryKey:['explore']});client.invalidateQueries({queryKey:['practice']});client.invalidateQueries({queryKey:['activity']})}
  function openText(id:string,occurrenceId?:string){setDestination(occurrenceId?{id,occurrenceId,key:Date.now()}:null);stopSpeech();setTextId(id);setView('read');setSelected(null);setRange(null);setPhraseReady(false);location.hash=id+(occurrenceId?'?sentence='+occurrenceId:'');}
  function openPractice(){if(!textId)return;stopSpeech();setSelected(null);setRange(null);setPhraseReady(false);setDestination(null);setView('practice');location.hash=textId+'?mode=practice'}
  function navigate(v:typeof view){stopSpeech();setView(v);setSelected(null);setRange(null);setPhraseReady(false);if(v!=='read'){setTextId(null);location.hash=v==='library'?'':v}}
@@ -86,23 +98,18 @@ function App(){
  }
 
 
- async function updateStatus(token:Token,write:()=>Promise<{state:State;revision:number}>){
-  const key=token.baseId;const previous=statusQueues.current.get(key);
-  const request=(async()=>{if(previous)await previous.catch(()=>undefined);const result=await write();statusRevisions.current.set(key,result.revision);return result})();
-  statusQueues.current.set(key,request);
-  try{
-   const result=await request;
-   await client.cancelQueries({queryKey:['word',token.baseId],exact:true});
-   setSelected(s=>s?.baseId===token.baseId&&s.statusRevision<=result.revision?{...s,state:result.state,statusRevision:result.revision}:s);
-   client.setQueryData<WordDetail>(['word',token.baseId],old=>old&&old.status.revision<=result.revision?{...old,status:result}:old);
-   refresh();
-  }finally{if(statusQueues.current.get(key)===request)statusQueues.current.delete(key)}
+ function currentStatus(token:Token,revision?:number):LearningState{
+  const cached=client.getQueryData<WordDetail>(['word',token.baseId])?.status;
+  return cached&&cached.revision>=token.statusRevision?cached:{state:token.state,revision:Math.max(token.statusRevision,revision??0)};
  }
  async function status(token:Token,state:State,revision?:number){
-  await updateStatus(token,()=>api('/words/'+token.wordId+'/status',{state,revision:revision===undefined?undefined:Math.max(revision,statusRevisions.current.get(token.baseId)??0)},'PUT'));
+  try{await wordStatuses.change(token.baseId,state,currentStatus(token,revision),revision=>api('/words/'+token.wordId+'/status',{state,revision},'PUT'))}
+  catch(error){void client.invalidateQueries({queryKey:['word',token.baseId],exact:true});throw error}
  }
  async function learn(token:Token){
-  await updateStatus(token,async()=>{const result=await api<{status:WordDetail['status']}>('/words/'+token.wordId+'/learn',{});return result.status});
+  await wordStatuses.change(token.baseId,'learning',currentStatus(token),async()=>{
+   const result=await api<{status:LearningState}>('/words/'+token.wordId+'/learn',{});return result.status;
+  });
  }
  function selectTokens(anchor:string,end:string,finished:boolean){
   if(!text)return;
@@ -113,8 +120,9 @@ function App(){
   }catch(e){setError((e as Error).message)}
  }
  function pick(token:Token,sentence:Sentence){
-  setRange(null);setSelected(token);void speak({text:token.base});
+  setRange(null);setSelected(token);
   if(token.state==='new')void perform(()=>learn(token));
+  void speak({text:token.base});
  }
  const completed=library.filter(t=>!t.archived&&t.textState==='completed').length;
  return <div className={"app-shell "+(view==='read'?'is-reading':'')}>
@@ -140,7 +148,7 @@ function Library({texts,loading,completed,open,importText}:{texts:TextItem[];loa
  useEffect(()=>{
   const ready=new Set(jobs.filter(j=>j.kind==='import'&&j.state==='ready').map(j=>j.id));
   const newlyCompleted=[...ready].some(id=>!completedImports.current.has(id));completedImports.current=ready;
-  if(newlyCompleted)for(const key of ['library','statistics','text','word','explore','practice','activity'])void client.invalidateQueries({queryKey:[key]});
+  if(newlyCompleted)for(const key of ['library','statistics','text','word','word-examples','explore','practice','activity'])void client.invalidateQueries({queryKey:[key]});
  },[jobs,client]);
  const {data:statistics}=useData<{meanings:number;sentences:number}>(['statistics'],'/statistics');
  const active=texts.filter(t=>filter==='archived'?t.archived:!t.archived).filter(t=>(filter==='all'||filter==='archived'||t.textState===filter)&&(!folder||t.folders?.some(f=>f.name===folder))&&(t.title+' '+t.body).includes(q));
@@ -231,10 +239,18 @@ function Reader({destination,text,settings,openOptions,selected,range,selectToke
  <footer className="reader-finish"><button className="secondary" onClick={practice}><Layers size={18}/>Practice</button></footer></article>
 }
 function WordPanel({token,sentence,speakSentence,close,speak,speechBusy,change,open,onCorrect,onError}:{token:Token;sentence?:Sentence;speakSentence:(text:string)=>Promise<void>;close:()=>void;speak:()=>Promise<void>;speechBusy:boolean;change:(s:State,r?:number)=>void;open:(id:string,occurrenceId?:string)=>void;onCorrect:()=>void;onError:(e:string)=>void}){
- const {data:word,error:wordError,isFetching:wordFetching,refetch:retryWord}=useData<WordDetail>(['word',token.baseId],'/words/'+token.baseId);const [translation,setTranslation]=useState('');const [translating,setTranslating]=useState(false);async function translateSentence(){if(!sentence)return;setTranslating(true);try{const r=await api<{translation?:string;jobId?:string}>('/translations',{text:sentence.body});setTranslation(r.translation??(await waitJob(r.jobId!)).translation)}catch(e){onError((e as Error).message)}finally{setTranslating(false)}}const [correcting,setCorrecting]=useState(false);const [meaning,setMeaning]=useState('');const [allMeanings,setAllMeanings]=useState(false);
+ const {data:word,error:wordError,isFetching:wordFetching,refetch:retryWord}=useData<WordDetail>(['word',token.baseId],'/words/'+token.baseId);
+ const statuses=useSyncExternalStore(wordStatuses.subscribe,wordStatuses.getSnapshot);const pending=statuses.get(token.baseId);
+ const savedStatus=word&&word.status.revision>token.statusRevision?word.status:{state:token.state,revision:token.statusRevision};const displayedStatus=pending&&(pending.pending?pending.revision>=savedStatus.revision:pending.revision>savedStatus.revision)?pending:savedStatus;
+ const [translation,setTranslation]=useState('');const [translating,setTranslating]=useState(false);async function translateSentence(){if(!sentence)return;setTranslating(true);try{const r=await api<{translation?:string;jobId?:string}>('/translations',{text:sentence.body});setTranslation(r.translation??(await waitJob(r.jobId!)).translation)}catch(e){onError((e as Error).message)}finally{setTranslating(false)}}const [correcting,setCorrecting]=useState(false);const [meaning,setMeaning]=useState('');const [allMeanings,setAllMeanings]=useState(false);
  useEffect(()=>{setCorrecting(false);setMeaning('');setTranslation('');setAllMeanings(false)},[token.id]);
  async function correct(){try{await api('/occurrences/'+token.id+'/meaning',{meaning,reading:word?.reading??token.reading,baseForm:true});onCorrect()}catch(e){onError((e as Error).message)}}
- return <ReadingDetails label="Word details" closeLabel="Close word details" text={word?.surface??token.base} reading={word?.reading??(token.wordId===token.baseId?token.reading:'')} copyLabel="Copy word" pronounceLabel="Pronounce word" speak={speak} busy={speechBusy} close={close}><div className="word-meanings">{wordError&&<QueryError message="Could not load word details." retry={()=>void retryWord()} retrying={wordFetching}/>} {!word?(wordError?null:<p>Loading meanings…</p>):word.meanings.length?<ol>{(allMeanings?word.meanings:word.meanings.slice(0,3)).map(m=><li key={m.id}><span>{m.body}</span><small>{[m.reading,m.partOfSpeech,m.sourceType].filter(Boolean).join(' · ')}</small></li>)}</ol>:<MissingMeanings key={word.id} wordId={word.id}/>}{word&&word.meanings.length>3&&<button className="text-button" aria-expanded={allMeanings} onClick={()=>setAllMeanings(v=>!v)}>{allMeanings?'Show fewer meanings':`Show all meanings (${word.meanings.length})`}</button>}</div>{token.surface!==token.base&&<div className="base-note">In this sentence <strong lang="ja">{token.surface}</strong></div>}<div className="status-section"><h3>Learning Status</h3><p>Shared with the base form and its other forms.</p><div className="status-switch" role="group" aria-label="Learning Status">{STATES.map(state=><button key={state} aria-pressed={(word?.status.state??token.state)===state} className={(word?.status.state??token.state)===state?'chosen '+state:''} onClick={()=>change(state,word?.status.revision??token.statusRevision)}>{state[0].toUpperCase()+state.slice(1)}</button>)}</div></div><section className="word-section sentence-context"><h3>Sentence</h3><div className="sentence-source">{sentence&&<CopyButton text={sentence.body} label="Copy sentence"/>}<p lang="ja">{sentence?.body}</p></div><div className="context-actions"><button className="text-button" disabled={speechBusy} onClick={()=>{if(sentence)void speakSentence(sentence.body)}}><Volume2 size={16}/>Listen</button><button className="text-button" disabled={translating} onClick={translateSentence}>{translating?'Translating…':'Sentence meaning'}</button></div>{translation&&<p className="context-translation">{translation}</p>}</section><section className="word-section"><h3>Word forms</h3><div className="form-chips">{word?.forms.map(f=><span key={f.id} lang="ja">{f.surface}</span>)}</div></section><section className="word-section"><h3>Examples <span>{word?.examples.length??0}</span></h3>{word?.examples.slice(0,12).map((e,i)=><button className="example-link" key={i} onClick={()=>open(e.textId,e.occurrenceId)}><span lang="ja">{e.body}</span><small>{e.title}{e.seen?' · Already read':''}<ChevronRight size={12}/></small></button>)}</section><button className="text-button correct-button" onClick={()=>setCorrecting(v=>!v)}>Add meaning</button>{correcting&&<div className="correction-form"><label>Meaning<input value={meaning} onChange={e=>setMeaning(e.target.value)} placeholder="Enter a meaning"/></label><button className="primary" disabled={!meaning.trim()} onClick={correct}>Save meaning</button></div>}</ReadingDetails>
+ return <ReadingDetails label="Word details" closeLabel="Close word details" text={word?.surface??token.base} reading={word?.reading??(token.wordId===token.baseId?token.reading:'')} copyLabel="Copy word" pronounceLabel="Pronounce word" speak={speak} busy={speechBusy} close={close}><div className="word-meanings">{wordError&&<QueryError message="Could not load word details." retry={()=>void retryWord()} retrying={wordFetching}/>} {!word?(wordError?null:<p>Loading meanings…</p>):word.meanings.length?<ol>{(allMeanings?word.meanings:word.meanings.slice(0,3)).map(m=><li key={m.id}><span>{m.body}</span><small>{[m.reading,m.partOfSpeech,m.sourceType].filter(Boolean).join(' · ')}</small></li>)}</ol>:<MissingMeanings key={word.id} wordId={word.id}/>}{word&&word.meanings.length>3&&<button className="text-button" aria-expanded={allMeanings} onClick={()=>setAllMeanings(v=>!v)}>{allMeanings?'Show fewer meanings':`Show all meanings (${word.meanings.length})`}</button>}</div>{token.surface!==token.base&&<div className="base-note">In this sentence <strong lang="ja">{token.surface}</strong></div>}<div className="status-section"><h3>Learning Status</h3><p>Shared with the base form and its other forms.</p><div className="status-switch" role="group" aria-label="Learning Status">{STATES.map(state=><button key={state} aria-pressed={displayedStatus.state===state} className={displayedStatus.state===state?'chosen '+state:''} onClick={()=>change(state,displayedStatus.revision)}>{state[0].toUpperCase()+state.slice(1)}</button>)}</div>{pending?.pending&&<p role="status">Saving status…</p>}</div><section className="word-section sentence-context"><h3>Sentence</h3><div className="sentence-source">{sentence&&<CopyButton text={sentence.body} label="Copy sentence"/>}<p lang="ja">{sentence?.body}</p></div><div className="context-actions"><button className="text-button" disabled={speechBusy} onClick={()=>{if(sentence)void speakSentence(sentence.body)}}><Volume2 size={16}/>Listen</button><button className="text-button" disabled={translating} onClick={translateSentence}>{translating?'Translating…':'Sentence meaning'}</button></div>{translation&&<p className="context-translation">{translation}</p>}</section><section className="word-section"><h3>Word forms</h3><div className="form-chips">{word?.forms.map(f=><span key={f.id} lang="ja">{f.surface}</span>)}</div></section><WordExamples key={token.baseId} baseId={token.baseId} open={open}/><button className="text-button correct-button" onClick={()=>setCorrecting(v=>!v)}>Add meaning</button>{correcting&&<div className="correction-form"><label>Meaning<input value={meaning} onChange={e=>setMeaning(e.target.value)} placeholder="Enter a meaning"/></label><button className="primary" disabled={!meaning.trim()} onClick={correct}>Save meaning</button></div>}</ReadingDetails>
+}
+function WordExamples({baseId,open}:{baseId:string;open:(id:string,occurrenceId?:string)=>void}){
+ const [requested,setRequested]=useState(false);
+ const {data,error,isFetching,refetch}=useQuery<{examples:WordDetail['examples']}>({queryKey:['word-examples',baseId],queryFn:({signal})=>api('/words/'+baseId+'/examples',undefined,undefined,{signal}),enabled:requested,staleTime:60_000});
+ return <section className="word-section"><h3>Examples</h3><button className="text-button" aria-expanded={requested} onClick={()=>setRequested(value=>!value)}>{requested?'Hide examples':'Show examples'}</button>{requested&&<>{error?<QueryError message="Could not load examples." retry={()=>void refetch()} retrying={isFetching}/>:!data?<p role="status">Loading examples…</p>:data.examples.length?data.examples.map((example,index)=><button className="example-link" key={example.occurrenceId+':'+index} onClick={()=>open(example.textId,example.occurrenceId)}><span lang="ja">{example.body}</span><small>{example.title}{example.seen?' · Already read':''}<ChevronRight size={12}/></small></button>):<p>No examples found.</p>}</>}</section>;
 }
 function PhraseDialog({range,fontSize,close,speak,speechBusy,speechError}:{range:PhraseRange;fontSize:number;close:()=>void;speak:()=>Promise<void>;speechBusy:boolean;speechError:string}){
  const [meaning,setMeaning]=useState('');const [translating,setTranslating]=useState(true);const [error,setError]=useState('');

@@ -1,6 +1,7 @@
 import {useEffect,useSyncExternalStore} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {api,type TextItem} from './api';
+import {reconcileTextStatuses} from './word-status';
 import {applyCheckpoint,type CheckpointChange} from './checkpoints';
 import {createCheckpointStore} from './checkpoint-store';
 
@@ -9,12 +10,16 @@ const store=createCheckpointStore(storage());
 const changed='kotoba:checkpoint-changed';
 
 async function persistCheckpoint(text:TextItem){
- if(!navigator.serviceWorker?.controller||!('caches' in window))return;
- const cache=await caches.open('kotoba-read-cache-v2');
- const json=(value:unknown)=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
- await cache.put('/api/v1/texts/'+text.id,json(text));
- const library=await cache.match('/api/v1/texts');
- if(library){const items=await library.json() as TextItem[];await cache.put('/api/v1/texts',json(items.map(item=>item.id===text.id?{...item,textState:text.textState,readingProgress:text.readingProgress,revision:text.revision}:item)))}
+ const worker=navigator.serviceWorker?.controller;if(!worker||!('caches' in window))return;
+ // Both checkpoint receipts and word receipts use the worker's same write
+ // queue. Acknowledge durability before removing the recoverable operation.
+ await new Promise<void>((resolve,reject)=>{
+  const channel=new MessageChannel();
+  const finish=(error?:Error)=>{clearTimeout(timer);channel.port1.close();error?reject(error):resolve()};
+  const timer=setTimeout(()=>finish(new Error('Reload the app to finish syncing reading progress.')),8000);
+  channel.port1.onmessage=event=>finish(event.data?.ok?undefined:new Error('Could not save reading progress on this device.'));
+  worker.postMessage({type:'checkpoint-cache',text:reconcileTextStatuses(text)},[channel.port2]);
+ });
 }
 
 export function useCheckpointQueue(){return useSyncExternalStore(store.subscribe,store.getSnapshot)}
@@ -45,6 +50,7 @@ export function useCheckpointSync(){
      client.setQueryData(['text',item.textId],result);
      client.setQueryData<TextItem[]>(['library'],old=>old?.map(text=>text.id===item.textId?{...text,readingProgress:result.readingProgress,textState:result.textState}:text));
      store.acknowledge(item.id);
+     void client.invalidateQueries({queryKey:['word-examples'],refetchType:'none'});
      for(const key of ['text','library','word','explore','practice','activity'])void client.invalidateQueries({queryKey:[key]});
     }catch{break}
    }

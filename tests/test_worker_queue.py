@@ -117,3 +117,26 @@ def test_native_worker_uses_bounded_wait_without_a_post_job_sleep(monkeypatch):
     assert [url.rsplit('/', 1)[-1] for url, _ in calls] == ['claim', 'complete', 'claim']
     assert calls[0][1] == {'params': {'wait': 25}}
     assert calls[2][1] == {'params': {'wait': 25}}
+
+
+def test_disconnected_long_poll_does_not_claim_work_after_wakeup(monkeypatch):
+    async def check():
+        disconnected = False
+        scans = []
+        class Request:
+            async def is_disconnected(self):return disconnected
+        class Wakeup:
+            revision = 0
+            RESCAN_SECONDS = 5
+            async def wait(self, *_):
+                nonlocal disconnected
+                disconnected = True
+        monkeypatch.setattr(api.app.state, 'worker_wakeup', Wakeup(), raising=False)
+        monkeypatch.setattr(api, 'require_worker', lambda _: None)
+        def scan():
+            scans.append(1)
+            return {'job':None} if len(scans)==1 else {'job':{'id':'must-remain-pending'}}
+        monkeypatch.setattr(api, 'claim_next', scan)
+        assert await api.claim(Request(), wait=1) == {'job':None}
+        assert len(scans) == 1
+    asyncio.run(check())

@@ -21,6 +21,7 @@ test('one Learning Status controls highlights, persists, and filters both lesson
  await expect(group).toHaveCount(1);await expect(group.getByRole('button',{name:'Learning',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(panel.getByRole('group',{name:/reading status|listening status/i})).toHaveCount(0);
  await group.getByRole('button',{name:'Known',exact:true}).tap();await expect(group.getByRole('button',{name:'Known',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(panel.getByText('Saving status…',{exact:true})).toHaveCount(0);
  await panel.getByRole('button',{name:'Close word details'}).tap();await page.reload();
  await expect(page.locator(`[data-token-id="${fish.id}"]`)).toHaveClass(/known/);
  const pool=await(await request.get('/api/v1/practice?textId='+text.id)).json();

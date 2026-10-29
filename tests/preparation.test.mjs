@@ -10,9 +10,9 @@ import ts from 'typescript';
 const root=fileURLToPath(new URL('..',import.meta.url));
 await mkdir(path.join(root,'.runtime'),{recursive:true});
 const output=await mkdtemp(path.join(root,'.runtime/preparation-tests-'));
-for(const name of ['api','speech-queue','speech']){
+for(const name of ['api','speech-queue','speech','word-status']){
  const source=await readFile(path.join(root,'web/src',name+'.ts'),'utf8');
- const compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText.replace(/from ['"]\.\/(api|speech-queue)['"]/g,"from './$1.mjs'");
+ const compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText.replace(/from ['"]\.\/(api|speech-queue|word-status)['"]/g,"from './$1.mjs'");
  await writeFile(path.join(output,name+'.mjs'),compiled);
 }
 const {waitJob,unifyCachedStatuses}=await import(pathToFileURL(path.join(output,'api.mjs')));
@@ -68,7 +68,7 @@ test('a hidden-page event does not poll early',async t=>{
  t.mock.timers.enable({apis:['setTimeout','Date']});
  let calls=0;const fetch=t.mock.method(globalThis,'fetch',async()=>++calls===1?running():ready());
  const result=waitJob('hidden');await flush();document.visibilityState='hidden';document.dispatchEvent(new Event('visibilitychange'));await flush();
- assert.equal(fetch.mock.calls.length,1);t.mock.timers.tick(1000);await result;
+ assert.equal(fetch.mock.calls.length,1);t.mock.timers.tick(200);await result;
 });
 
 test('speech consumers share preparation and then reuse the loaded audio',async t=>{

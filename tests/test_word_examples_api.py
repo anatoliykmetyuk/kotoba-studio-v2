@@ -42,7 +42,8 @@ def test_word_examples_are_explicit_family_scoped_deduplicated_and_bounded(clien
     assert core['examples'] == [] and core['status']['state'] == 'known'
     assert core['base']['id'] == base_id and core['base']['type'] == 'Word'
     assert {w['surface'] for w in core['forms']} == {'読む', '読んだ'}
-    assert core['meanings'] and core['meaning'] == 'to read'
+    assert core['meanings'] and {m['body'] for m in core['meanings']} == {'to read'}
+    assert core['meaning'] == '; '.join(m['body'] for m in core['meanings'])
     base = client.get('/api/v1/words/' + base_id + '/examples')
     form = client.get('/api/v1/words/' + form_id + '/examples')
     assert base.status_code == form.status_code == 200

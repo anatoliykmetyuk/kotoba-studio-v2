@@ -21,6 +21,7 @@ test('mobile sheet, example destination, practice preparation, instant audio and
   await expect(panel.locator('.word-meanings li').first()).toBeVisible();
   await panel.getByRole('button',{name:'Close word details'}).click();await expect(panel).toHaveCount(0);
   await page.locator(`[data-token-id="${detail.sentences[0].tokens[0].id}"]`).tap();
+  await panel.getByRole('button',{name:'Show examples',exact:true}).click();
   await panel.locator('.example-link').filter({hasText:detail.title}).first().click();await expect(panel).toHaveCount(0);await expect(page.locator('.example-highlight')).toBeVisible();await expect(page.locator('.example-highlight')).toHaveCount(0,{timeout:5000});
   for(const base of new Set(detail.sentences.flatMap(s=>s.tokens.map(w=>w.baseId))))await request.put('/api/v1/words/'+base+'/status',{data:{state:'learning'}});
   await page.locator('.reader-finish').getByRole('button',{name:'Practice',exact:true}).click();await expect(page.getByLabel('Include all statuses')).toHaveCount(0);

@@ -540,6 +540,7 @@ async def claim(request:Request,authorization:str|None=Header(default=None),wait
     require_worker(authorization)
     wakeup=app.state.worker_wakeup;deadline=time.monotonic()+wait
     while True:
+        if await request.is_disconnected():return {'job':None}
         revision=wakeup.revision
         result=await run_in_threadpool(claim_next)
         if result['job'] or wait==0:return result

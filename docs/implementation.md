@@ -12,6 +12,12 @@ OML in `ontology/src` is authoritative. Official openCAESAR tooling compiles and
 validates it; the generated contract drives database constraints and transactional
 validation. Structural and generic agent mutations validate the complete graph.
 Bounded scalar changes validate affected entities without scanning the corpus.
+Writes retain the shared schema lock so structural validation sees a consistent
+graph; scalar helpers reuse transaction-local reads and return updated properties
+directly to shorten that lock. Checkpoint encounter nodes and edges are created
+in one validated batch, with once-only reading credit unchanged. Idle workers use bounded long polling with queue
+notifications and read-only recovery scans; clients poll new language jobs quickly
+at first, then back off to one second.
 
 A Word has a stable UUID and unique exact spelling. Meanings are separate nodes
 with source provenance, including multiple dictionary alternatives. Every Word
@@ -103,7 +109,13 @@ undo, and update the durable read cache before their queue entries are removed.
 A word tap opens its canonical base, meanings, and family details, automatically
 pronounces the base, and atomically promotes New to Learning without downgrading
 Familiar or Known. Show the first three dictionary meanings with an explicit
-expansion control. New, Learning and Familiar have distinct background highlights;
+expansion control. Other sentences containing the word load only after selecting
+Show examples; opening a word does not query examples or their count. Requested
+examples are cached per canonical family. Status changes immediately update all
+cached family occurrences while saving, roll back on failure, and reconcile
+server revisions without reloading unrelated lesson or library data. Only
+acknowledged states enter the durable offline cache.
+New, Learning and Familiar have distinct background highlights;
 Known and Latin text are unhighlighted. Latin text has no ordinary click action.
 
 Word and selected-phrase popups share the same `ReadingDetails` component,

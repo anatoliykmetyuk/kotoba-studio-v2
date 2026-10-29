@@ -456,6 +456,45 @@
         }
       }
     },
+    "/api/v1/words/{id}/examples": {
+      "get": {
+        "summary": "Word Examples",
+        "operationId": "word_examples_api_v1_words__id__examples_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordExamplesResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/words/{id}/meanings": {
       "post": {
         "summary": "Request Word Meanings",
@@ -1790,6 +1829,18 @@
         "operationId": "claim_api_v1_worker_claim_post",
         "parameters": [
           {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 25,
+              "minimum": 0,
+              "default": 0,
+              "title": "Wait"
+            }
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
@@ -3058,6 +3109,24 @@
         "additionalProperties": false,
         "type": "object",
         "title": "VocabularyCleanup"
+      },
+      "WordExamplesResult": {
+        "properties": {
+          "examples": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Examples"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "examples"
+        ],
+        "title": "WordExamplesResult"
       },
       "WordMeaningsResult": {
         "properties": {

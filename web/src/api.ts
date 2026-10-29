@@ -1,3 +1,4 @@
+import {wordStatuses,reconcileTextStatuses} from './word-status';
 import type {components} from './generated-api';
 export type State=components['schemas']['Status']['state'];
 export type Token={id:string;wordId:string;surface:string;reading:string;meaning:string;baseId:string;base:string;start:number;end:number;state:State;statusRevision:number};
@@ -33,14 +34,19 @@ export function unifyCachedStatuses<T>(path:string,value:T):T{
 export async function api<T>(path:string,body?:unknown,method?:string,options:RequestInit={}):Promise<T>{
  const headers=new Headers(options.headers);if(body!==undefined)headers.set('Content-Type','application/json');
  const r=await fetch('/api/v1'+path,{...options,method:method??(body===undefined?'GET':'POST'),headers,body:body===undefined?undefined:JSON.stringify(body)});
- if(!r.ok){let j:{message?:string;detail?:unknown}={};try{j=await r.json()}catch{};throw new Error(j.message??(typeof j.detail==='string'?j.detail:`Request failed (${r.status}). Please retry.`));}return unifyCachedStatuses(path,await r.json());
+ if(!r.ok){let j:{message?:string;detail?:unknown}={};try{j=await r.json()}catch{};throw new Error(j.message??(typeof j.detail==='string'?j.detail:`Request failed (${r.status}). Please retry.`));}const value=unifyCachedStatuses(path,await r.json()) as T;
+ if(/^\/words\/[^/?]+$/.test(path)){
+  const word=value as WordDetail;return {...word,status:wordStatuses.reconcile(word.base.id,word.status)} as T;
+ }
+ if(path.startsWith('/texts/')&&Array.isArray((value as TextItem)?.sentences))return reconcileTextStatuses(value as TextItem) as T;
+ return value;
 }
-function pollDelay(signal:AbortSignal):Promise<void>{
+function pollDelay(signal:AbortSignal,delayMs:number):Promise<void>{
  return new Promise((resolve,reject)=>{
   const finish=(error?:unknown)=>{clearTimeout(timer);signal.removeEventListener('abort',abort);document.removeEventListener('visibilitychange',visible);window.removeEventListener('pageshow',resume);error?reject(error):resolve()};
   const abort=()=>finish(signal.reason??new DOMException('Cancelled','AbortError'));
   const resume=()=>finish();const visible=()=>{if(document.visibilityState==='visible')resume()};
-  const timer=setTimeout(resume,1000);signal.addEventListener('abort',abort,{once:true});document.addEventListener('visibilitychange',visible);window.addEventListener('pageshow',resume);
+  const timer=setTimeout(resume,delayMs);signal.addEventListener('abort',abort,{once:true});document.addEventListener('visibilitychange',visible);window.addEventListener('pageshow',resume);
   if(signal.aborted)abort();
  });
 }
@@ -49,13 +55,14 @@ export async function waitJob(id:string,signal?:AbortSignal,timeoutMs=600_000):P
  const timeout=new Error('This request is still processing. Please retry.');const expires=Date.now()+timeoutMs;
  const timer=setTimeout(()=>controller.abort(timeout),timeoutMs);signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
  try{
+  let delayMs=200;
   while(true){
    if(Date.now()>=expires)controller.abort(timeout);
    if(controller.signal.aborted)throw controller.signal.reason;
    const j=await api<{state:string;result:Record<string,string>;error:string}>('/jobs/'+id,undefined,undefined,{signal:controller.signal,cache:'no-store'});
    if(j.state==='ready')return j.result;
    if(j.state==='failed')throw new Error(j.error||'This request failed. Please retry.');
-   await pollDelay(controller.signal);
+   await pollDelay(controller.signal,delayMs);delayMs=Math.min(1000,delayMs*1.5);
   }
  }catch(error){if(controller.signal.aborted)throw controller.signal.reason;throw error}
  finally{clearTimeout(timer);signal?.removeEventListener('abort',abort)}

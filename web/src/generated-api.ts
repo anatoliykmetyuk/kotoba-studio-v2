@@ -192,6 +192,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/words/{id}/examples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Word Examples */
+        get: operations["word_examples_api_v1_words__id__examples_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/words/{id}/meanings": {
         parameters: {
             query?: never;
@@ -1197,6 +1214,13 @@ export interface components {
             /** Expectedfingerprint */
             expectedFingerprint?: string | null;
         };
+        /** WordExamplesResult */
+        WordExamplesResult: {
+            /** Examples */
+            examples: {
+                [key: string]: unknown;
+            }[];
+        };
         /** WordMeaningsResult */
         WordMeaningsResult: {
             /** Wordid */
@@ -1577,6 +1601,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    word_examples_api_v1_words__id__examples_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WordExamplesResult"];
                 };
             };
             /** @description Validation Error */
@@ -2636,7 +2691,9 @@ export interface operations {
     };
     claim_api_v1_worker_claim_post: {
         parameters: {
-            query?: never;
+            query?: {
+                wait?: number;
+            };
             header?: {
                 authorization?: string | null;
             };
