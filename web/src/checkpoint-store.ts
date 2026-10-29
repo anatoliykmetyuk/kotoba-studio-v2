@@ -35,6 +35,15 @@ export function createCheckpointStore(storage:Storage|null){
    catch{throw new Error('Could not save the checkpoint on this device. Check available browser storage and retry.')}
    sync();return item;
   },
-  acknowledge(id:string){storage?.removeItem(checkpointPrefix+id);sync()},
+  acknowledge(ids:string|string[]){for(const id of typeof ids==='string'?[ids]:ids)storage?.removeItem(checkpointPrefix+id);sync()},
  };
+}
+
+
+/** Coalesce only contiguous actions for one lesson. Their order, including undo,
+ * remains unchanged, and operation IDs survive retries with a different batch. */
+export function nextCheckpointBatch<T extends {textId:string}>(queue:readonly T[],limit=50):T[]{
+ const result:T[]=[];
+ for(const item of queue){if(result.length>=limit||result.length&&item.textId!==result[0].textId)break;result.push(item)}
+ return result;
 }

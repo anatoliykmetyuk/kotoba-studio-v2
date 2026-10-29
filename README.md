@@ -142,6 +142,7 @@ Python integration tests reset only the explicitly enabled development database 
 The browser matrix covers phone Chromium, phone WebKit, iPad WebKit, and desktop overlays. Mobile configurations cover portrait and landscape. These are browser emulations, not physical-device tests. WebKit offline emulation has a documented service-worker limitation; it is not reported as passing when skipped. See [acceptance evidence](docs/acceptance.md).
 
 To rebuild the ontology, install Java 21 and run `uv run python scripts/compile_ontology.py`. OML is authoritative; graph writes are transactionally checked against its generated contract.
+The API includes [Neo4j’s official Rust driver extension](https://neo4j.com/docs/python-manual/current/performance/) to accelerate snapshot decoding. The lockfile keeps it compatible with the Python driver; prebuilt wheels cover the supported Apple Silicon and Linux container runtimes.
 
 ## Optional legacy migration
 

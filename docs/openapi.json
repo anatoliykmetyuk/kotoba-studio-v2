@@ -419,6 +419,53 @@
         }
       }
     },
+    "/api/v1/texts/{id}/checkpoints": {
+      "post": {
+        "summary": "Checkpoints",
+        "operationId": "checkpoints_api_v1_texts__id__checkpoints_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckpointBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/words/{id}": {
       "get": {
         "summary": "Word",
@@ -2158,6 +2205,58 @@
           "completed"
         ],
         "title": "Checkpoint"
+      },
+      "CheckpointBatch": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/CheckpointChange"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Changes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "changes"
+        ],
+        "title": "CheckpointBatch"
+      },
+      "CheckpointChange": {
+        "properties": {
+          "start": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "End"
+          },
+          "completed": {
+            "type": "boolean",
+            "title": "Completed"
+          },
+          "requestId": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Requestid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "completed",
+          "requestId"
+        ],
+        "title": "CheckpointChange"
       },
       "Correction": {
         "properties": {

@@ -13,7 +13,7 @@ for(const name of ['checkpoints','checkpoint-store']){
  await writeFile(path.join(output,`${name}.mjs`),ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText);
 }
 const {readingSections,readingProgress,applyCheckpoint}=await import(pathToFileURL(path.join(output,'checkpoints.mjs')));
-const {createCheckpointStore,checkpointPrefix}=await import(pathToFileURL(path.join(output,'checkpoint-store.mjs')));
+const {createCheckpointStore,checkpointPrefix,nextCheckpointBatch}=await import(pathToFileURL(path.join(output,'checkpoint-store.mjs')));
 after(()=>rm(output,{recursive:true,force:true}));
 
 function sentence(index,count,completed=false){return {id:'sentence-'+index,start:index*100,end:index*100+99,completed,tokens:Array.from({length:count},(_,i)=>({id:`token-${index}-${i}`,baseId:`base-${index}-${i}`,state:'new'}))}}
@@ -69,4 +69,18 @@ test('malformed entries do not affect unrelated local storage',()=>{
  const storage=new BrowserStorage();storage.setItem('other','keep');storage.setItem(checkpointPrefix+'invalid','{');
  storage.setItem(checkpointPrefix+'bad',JSON.stringify({...change(0,99),id:'different',createdAt:0}));
  assert.deepEqual(createCheckpointStore(storage).getSnapshot(),[]);assert.equal(storage.getItem('other'),'keep');
+});
+
+
+test('queued checkpoint batches preserve order, stop at lesson boundaries, and stay bounded',()=>{
+ const actions=[{id:'check',textId:'a',completed:true},{id:'undo',textId:'a',completed:false},{id:'other',textId:'b',completed:true},{id:'later',textId:'a',completed:true}];
+ assert.deepEqual(nextCheckpointBatch(actions),actions.slice(0,2));assert.deepEqual(nextCheckpointBatch([]),[]);
+ assert.equal(nextCheckpointBatch(Array.from({length:70},(_,i)=>({textId:'a',id:String(i)}))).length,50);
+});
+
+test('acknowledging one durable batch publishes once and leaves later actions recoverable',()=>{
+ const storage=new BrowserStorage(),store=createCheckpointStore(storage);
+ const first=store.add(change(0,99)),second=store.add(change(0,99,false)),later=store.add(change(100,199));
+ let updates=0;store.subscribe(()=>updates++);store.acknowledge([first.id,second.id]);
+ assert.equal(updates,1);assert.deepEqual(createCheckpointStore(storage).getSnapshot().map(item=>item.id),[later.id]);
 });

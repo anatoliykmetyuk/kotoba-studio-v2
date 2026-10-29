@@ -3,7 +3,7 @@ import {useQueryClient} from '@tanstack/react-query';
 import {api,type TextItem} from './api';
 import {reconcileTextStatuses} from './word-status';
 import {applyCheckpoint,type CheckpointChange} from './checkpoints';
-import {createCheckpointStore} from './checkpoint-store';
+import {createCheckpointStore,nextCheckpointBatch} from './checkpoint-store';
 
 function storage(){try{return localStorage}catch{return null}}
 const store=createCheckpointStore(storage());
@@ -36,9 +36,11 @@ export function useCheckpointSync(){
   async function send(){
    store.sync();
    while(!disposed&&navigator.onLine){
-    store.sync();const item=store.getSnapshot()[0];if(!item)break;
+    store.sync();const batch=nextCheckpointBatch(store.getSnapshot()),item=batch[0];if(!item)break;
     try{
-     let result=await api<TextItem>('/texts/'+item.textId+'/checkpoint',{start:item.start,end:item.end,completed:item.completed},'PUT',{headers:{'Idempotency-Key':item.id},signal:AbortSignal.timeout(12_000)});
+     let result=batch.length===1
+      ?await api<TextItem>('/texts/'+item.textId+'/checkpoint',{start:item.start,end:item.end,completed:item.completed},'PUT',{headers:{'Idempotency-Key':item.id},signal:AbortSignal.timeout(12_000)})
+      :await api<TextItem>('/texts/'+item.textId+'/checkpoints',{changes:batch.map(change=>({requestId:change.id,start:change.start,end:change.end,completed:change.completed}))},'POST',{signal:AbortSignal.timeout(12_000)});
      // An idempotent retry can return an older receipt after another device
      // edited this lesson. Prefer the current view whenever it is reachable.
      try{const current=await api<TextItem>('/texts/'+item.textId,undefined,undefined,{cache:'no-store',signal:AbortSignal.timeout(12_000)});if(current.revision>=result.revision)result=current}catch{}
@@ -49,7 +51,7 @@ export function useCheckpointSync(){
      await client.cancelQueries({queryKey:['text',item.textId],exact:true});
      client.setQueryData(['text',item.textId],result);
      client.setQueryData<TextItem[]>(['library'],old=>old?.map(text=>text.id===item.textId?{...text,readingProgress:result.readingProgress,textState:result.textState}:text));
-     store.acknowledge(item.id);
+     store.acknowledge(batch.map(change=>change.id));
      void client.invalidateQueries({queryKey:['word-examples'],refetchType:'none'});
      for(const key of ['text','library','word','explore','practice','activity'])void client.invalidateQueries({queryKey:[key]});
     }catch{break}

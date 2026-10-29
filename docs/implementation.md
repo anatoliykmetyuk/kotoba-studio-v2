@@ -14,8 +14,13 @@ validation. Structural and generic agent mutations validate the complete graph.
 Bounded scalar changes validate affected entities without scanning the corpus.
 Writes retain the shared schema lock so structural validation sees a consistent
 graph; scalar helpers reuse transaction-local reads and return updated properties
-directly to shorten that lock. Checkpoint encounter nodes and edges are created
-in one validated batch, with once-only reading credit unchanged. Idle workers use bounded long polling with queue
+directly to shorten that lock. Full snapshots transfer all nodes and edges as two
+aggregate records through the official accelerated driver; no semantic checks
+are removed. Checkpoint encounter nodes and edges are created
+in one validated batch, with once-only reading credit unchanged. Contiguous queued
+checkpoint actions for one lesson share one transaction, retain individual retry
+receipts and execute in their original order, including undo. Durable cache
+acknowledgment precedes removing their local queue entries. Idle workers use bounded long polling with queue
 notifications and read-only recovery scans; clients poll new language jobs quickly
 at first, then back off to one second.
 
