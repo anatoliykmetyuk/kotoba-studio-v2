@@ -1,5 +1,42 @@
 # Release acceptance
 
+## Reader popup paint stability, 2026-11-01
+
+Popup scroll locking now keeps the body in document flow and leaves its overflow
+unchanged. Root overflow locking and touch boundary guards retain background
+scroll protection without resetting the viewport or moving the sticky toolbar.
+The old iPad WebKit build reset scrollY from 1400 to zero when a word opened.
+The regression samples scroll offset, document height and toolbar position every
+frame through three open/close cycles, with nonzero simulated safe-area insets,
+and also checks token geometry, bookmarks, progress and background pan prevention.
+
+All eight regression configurations passed in 41.5 seconds across phone
+Chromium, phone WebKit and iPad WebKit in both orientations, plus desktop
+Chromium and WebKit. The broader matrix passed 32 cases in 6.2 minutes; six
+settings cases still asserted the previous fixed-body implementation. After
+updating those assertions, all 20 affected settings, import and popup input
+checks passed in 1.9 minutes. Together these establish 46 distinct passing
+browser cases over trusted acceptance HTTPS without application route mocks.
+Four WebKit offline-emulation cases remain skipped for the documented
+service-worker issue; ten duplicate standalone-project cases are intentionally
+covered by the Chromium app-window checks. No skipped case is reported as passing.
+
+A real Chromium standalone app window also passed frame-sampled popup checks at
+390x844, 844x390, 820x1180 and 1180x820 in 2.2 seconds, with an active service
+worker and nonzero simulated safe areas. Screenshots were inspected and native
+media output remained muted. These checks do not establish physical installed
+iPad rendering or capture its reported millisecond white flash directly.
+All 81 JavaScript tests and the frontend build passed. Independent review found
+no remaining notable recommendations. Evidence is retained in ignored
+`.runtime/reader-flash/` storage.
+
+Production serves the verified assets and service worker over trusted HTTPS on
+port 3010, with loopback-only upstream HTTP. Read-only Chromium phone and WebKit
+iPad settings smoke checks passed in 1.7 seconds. Graph and media snapshots are
+unchanged across the frontend-only deployment. All 29 available files in the
+existing protected-file baseline still match; 933 baseline paths remain
+unavailable, as previously recorded. The baseline was not replaced.
+
 ## Phrase panel typography, 2026-10-22
 
 Selected Japanese phrase text now uses the current reader font size rather than

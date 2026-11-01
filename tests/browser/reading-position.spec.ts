@@ -57,7 +57,7 @@ test('scrolling, restoration and popup locking save the bookmark without complet
   for(let n=0;n<2;n++){
    await page.getByRole('button',{name:'Reading options'}).evaluate((button:HTMLButtonElement)=>button.click());
    const dialog=page.getByRole('dialog',{name:'Settings',exact:true});await expect(dialog).toBeVisible();
-   await expect(page.locator('body')).toHaveCSS('position','fixed');
+   await expect(page.locator('html')).toHaveCSS('overflow','hidden');
    await dialog.evaluate(el=>{el.scrollTop=el.scrollHeight});
    await dialog.getByRole('button',{name:'Close',exact:true}).evaluate((button:HTMLButtonElement)=>button.click());
    await expect(dialog).toHaveCount(0);await expectPosition(page,backward);

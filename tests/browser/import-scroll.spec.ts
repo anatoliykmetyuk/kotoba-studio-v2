@@ -79,7 +79,7 @@ test('import gestures belong to the text area or form where they begin',async({p
  }
  await dialog.evaluate(el=>{el.scrollTop=40});await page.screenshot({path:info.outputPath('import-scroll.png')});
  await dialog.getByRole('button',{name:'Close',exact:true}).click();
- await expect(dialog).toHaveCount(0);await expect(page.locator('body')).not.toHaveCSS('position','fixed');
+ await expect(dialog).toHaveCount(0);await expect(page.locator('html')).not.toHaveCSS('overflow','hidden');
 });
 
 test('standalone import form scrolls independently of its focused text area',async({browserName,baseURL},info)=>{

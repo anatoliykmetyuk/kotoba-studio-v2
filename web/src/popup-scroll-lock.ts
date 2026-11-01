@@ -15,7 +15,10 @@ function lockDocument(){
  const scrollbar=Math.max(0,window.innerWidth-root.clientWidth);
  const padding=parseFloat(getComputedStyle(body).paddingRight)||0;
  set(root,'overflow','hidden');set(root,'overscroll-behavior','none');set(root,'scroll-behavior','auto');
- set(body,'position','fixed');set(body,'top',`${-y}px`);set(body,'left',`${-x}px`);set(body,'width','100%');set(body,'overflow','hidden');
+ // Keep the reader in document flow. Fixing/offsetting the body resets the
+ // viewport scroll position and makes iPad WebKit repaint the reading surface.
+ // Leave body overflow visible too, so the viewport remains the toolbar's
+ // sticky scroll container rather than a non-scrolling body wrapper.
  if(scrollbar)set(body,'padding-right',`${padding+scrollbar}px`);
 
  let touch:{x:number;y:number}|null=null;
@@ -38,8 +41,8 @@ function lockDocument(){
     if(/auto|scroll|overlay/.test(overflow)&&remaining>1&&((delta>0&&position>0)||(delta<0&&position<remaining-1)))return;
    }
   }
-  // Fixed body prevents page movement in Safari; this also prevents overscroll
-  // chaining from a popup boundary and touches on its backdrop.
+  // iOS PWAs can ignore overflow:hidden for touch scrolling. Cancel background
+  // pans and popup overscroll without moving the body into a new paint layer.
   if(event.cancelable)event.preventDefault();
  };
  document.addEventListener('touchstart',start,{passive:true});
@@ -49,7 +52,7 @@ function lockDocument(){
   for(const {element,property,value,priority} of saved.filter(entry=>entry.property!=='scroll-behavior')){
    if(value)element.style.setProperty(property,value,priority);else element.style.removeProperty(property);
   }
-  window.scrollTo(x,y);
+  if(window.scrollX!==x||window.scrollY!==y)window.scrollTo(x,y);
   const behavior=saved.find(entry=>entry.property==='scroll-behavior')!;
   if(behavior.value)root.style.setProperty(behavior.property,behavior.value,behavior.priority);else root.style.removeProperty(behavior.property);
  };

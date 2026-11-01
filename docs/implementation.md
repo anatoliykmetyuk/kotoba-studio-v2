@@ -129,6 +129,8 @@ Word details are overlays at every viewport size. Wide-screen overlays open from
 the right without changing reader width, token positions, or reading progress;
 never restore a layout column for the panel. Lock background scrolling, retain
 modal keyboard focus, and restore the original reading position on close.
+Keep the reader in document flow while locking scroll; opening a popup must not
+reset the viewport scroll offset or displace the sticky reading toolbar.
 
 Popup dismissal gestures accept touch input only. Hide the drag handle with a
 fine mouse pointer. A downward touch swipe anywhere on a popup dismisses it only if the

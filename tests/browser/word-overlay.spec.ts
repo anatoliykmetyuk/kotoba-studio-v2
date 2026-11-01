@@ -56,7 +56,7 @@ test('popup close accepts pen after touch scrolling and outside dismissal uses m
  await expect(panel).toBeVisible();
  await page.screenshot({path:info.outputPath('popup-dismissal.png')});
  if(isMobile)await page.touchscreen.tap(point.x,point.y);else await page.mouse.click(point.x,point.y);
- await expect(panel).toHaveCount(0);await expect(page.locator('body')).not.toHaveCSS('position','fixed');
+ await expect(panel).toHaveCount(0);await expect(page.locator('html')).not.toHaveCSS('overflow','hidden');
  // Clicking the backdrop must not also select a lesson word behind it.
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await token.click();await expect(panel).toBeVisible();
@@ -123,7 +123,7 @@ test('word and phrase overlays preserve reader geometry, support copying and kee
   const token=page.locator(`[data-token-id="${tokenId}"]`);const before=await geometry(page),y=await page.evaluate(()=>scrollY);
   await token.click();const panel=page.getByRole('dialog',{name:'Word details',exact:true});
   await expect(panel).toBeVisible();await expect(panel).toHaveCSS('position','fixed');await expect(panel).toHaveAttribute('aria-modal','true');
-  await expect(page.locator('.sheet-backdrop')).toBeVisible();await expect(page.locator('body')).toHaveCSS('position','fixed');
+  await expect(page.locator('.sheet-backdrop')).toBeVisible();await expect(page.locator('html')).toHaveCSS('overflow','hidden');
   await expect(panel.getByText('Loading meanings…',{exact:true})).toHaveCount(0);
   await unchanged(page,before);
   if(desktop)await mouseDoesNotDismiss(page,panel);
@@ -184,4 +184,49 @@ test('word and phrase overlays preserve reader geometry, support copying and kee
   await settings.getByRole('button',{name:'Close',exact:true}).click();
  }
  await page.goto('/');
+});
+
+test('opening a word keeps the document and sticky reader in place throughout popup painting',async({page,request,isMobile,browserName},info)=>{
+ const response=await request.post('/api/v1/imports',{data:{title:'Reader paint acceptance',body:'猫は窓のそばで眠っています。私は温かいお茶を飲みました。\n\n'.repeat(35)}});
+ expect(response.ok()).toBe(true);const imported=await response.json();let id=imported.textId;
+ if(!id)await expect.poll(async()=>{const job=await(await request.get('/api/v1/jobs/'+imported.jobId)).json();expect(job.state,job.error).not.toBe('failed');id=job.result.textId;return job.state},{timeout:90_000}).toBe('ready');
+ try{
+  await page.goto('/#'+id);await expect(page.locator('.book-body')).toBeVisible();
+  // Nonzero simulated cutouts also exercise the sticky toolbar in standalone layouts.
+  await page.evaluate(()=>{for(const [side,value] of Object.entries({top:24,right:12,bottom:20,left:12}))document.documentElement.style.setProperty('--safe-'+side,value+'px')});
+  await page.evaluate(()=>scrollTo(0,1400));await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(1000);
+  await page.waitForTimeout(250);
+  const tokenId=await page.locator('.token').evaluateAll(tokens=>(tokens.find(el=>{const r=el.getBoundingClientRect();return r.top>150&&r.bottom<innerHeight-50}) as HTMLElement).dataset.tokenId!);
+  const token=page.locator(`[data-token-id="${tokenId}"]`),before=await geometry(page);
+  const original=await page.evaluate(id=>({y:scrollY,height:document.documentElement.scrollHeight,toolbar:document.querySelector('.reader-toolbar')!.getBoundingClientRect().top,bookmark:localStorage.getItem('kotoba:position:'+id)}),id);
+  await page.screenshot({path:info.outputPath('reader-before-word.png')});
+  for(let cycle=0;cycle<3;cycle++){
+   await page.evaluate(()=>{
+    const state={running:true,frames:[] as {y:number;height:number;toolbar:number}[]};(window as any).readerPaint=state;
+    const sample=()=>{state.frames.push({y:scrollY,height:document.documentElement.scrollHeight,toolbar:document.querySelector('.reader-toolbar')!.getBoundingClientRect().top});if(state.running)requestAnimationFrame(sample)};requestAnimationFrame(sample);
+   });
+   if(isMobile)await token.tap();else await token.click();
+   const panel=page.getByRole('dialog',{name:'Word details',exact:true});await expect(panel).toBeVisible();
+   await expect(page.locator('html')).toHaveCSS('overflow','hidden');
+   if(!isMobile||browserName==='chromium'){await page.mouse.move(5,100);await page.mouse.wheel(0,300)}
+   await page.keyboard.press('PageDown');
+   // A backdrop pan must be canceled even on iOS PWA versions that ignore overflow:hidden.
+   expect(await page.locator('.sheet-backdrop').evaluate(el=>{
+    for(const [type,y] of [['touchstart',200],['touchmove',150]] as const){const e=new Event(type,{bubbles:true,cancelable:true});Object.assign(e,{touches:[{clientX:5,clientY:y}]});el.dispatchEvent(e);if(type==='touchmove')return e.defaultPrevented}
+   })).toBe(true);
+   await page.waitForTimeout(250);await unchanged(page,before);
+   if(cycle===0)await page.screenshot({path:info.outputPath('reader-word-open.png')});
+   await panel.getByRole('button',{name:'Close word details',exact:true}).click();await expect(panel).toHaveCount(0);
+   await page.waitForTimeout(100);
+   const frames=await page.evaluate(()=>{const state=(window as any).readerPaint;state.running=false;return state.frames as {y:number;height:number;toolbar:number}[]});
+   expect(frames.length).toBeGreaterThan(2);
+   for(const frame of frames){expect(frame.y).toBeCloseTo(original.y,0);expect(frame.height).toBeCloseTo(original.height,0);expect(frame.toolbar).toBeCloseTo(original.toolbar,0)}
+   await unchanged(page,before);
+   expect(await page.evaluate(id=>localStorage.getItem('kotoba:position:'+id),id)).toBe(original.bookmark);
+   await expect(page.getByRole('progressbar',{name:'Reading progress',exact:true})).toHaveAttribute('aria-valuenow','0');
+  }
+ }finally{
+  await page.close();const text=await(await request.get('/api/v1/texts/'+id)).json();
+  expect((await request.patch('/api/v1/texts/'+id,{data:{archived:true,revision:text.revision}})).ok()).toBe(true);
+ }
 });

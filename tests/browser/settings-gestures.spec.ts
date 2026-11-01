@@ -50,7 +50,7 @@ test('settings hold the reading position and sliders stay at the touched value',
  // offscreen options button into view, which would erase this regression setup.
  await page.getByRole('button',{name:'Reading options'}).evaluate((button:HTMLButtonElement)=>button.click());
  const dialog=page.getByRole('dialog',{name:'Settings',exact:true});await expect(dialog).toBeVisible();
- await expect(page.locator('body')).toHaveCSS('position','fixed');
+ await expect(page.locator('html')).toHaveCSS('overflow','hidden');
  expect(await page.locator('.book-body').evaluate(el=>el.getBoundingClientRect().top)).toBeCloseTo(originalTop,0);
  const viewport=page.viewportSize()!;
  await page.setViewportSize({width:viewport.width,height:Math.min(viewport.height,420)});
